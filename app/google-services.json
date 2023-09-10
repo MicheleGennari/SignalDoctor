@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "417531234954",
+    "firebase_url": "https://signaldoctor-be678-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "signaldoctor-be678",
+    "storage_bucket": "signaldoctor-be678.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:417531234954:android:674e6ecd69738f3e3b7b73",
+        "android_client_info": {
+          "package_name": "com.example.signaldoctor"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "417531234954-81vm15hkpgc3br3ts4qrnc61pi4vobdn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCrS3jqXp7alJIe-fU5TgpkHexfrwMqcuM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "417531234954-81vm15hkpgc3br3ts4qrnc61pi4vobdn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
