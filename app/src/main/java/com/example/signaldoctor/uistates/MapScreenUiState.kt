@@ -1,5 +1,7 @@
 package com.example.signaldoctor.uistates
 
+import android.location.Location
+import androidx.annotation.FloatRange
 import com.example.signaldoctor.contracts.Measure
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -11,23 +13,35 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import org.osmdroid.util.GeoPoint
+import java.nio.DoubleBuffer
 import javax.inject.Inject
 
 class MapScreenUiState @Inject constructor(
 ) {
+
+    private val _ScreenLocation = MutableStateFlow(Location("provider").apply { latitude = 44.22; longitude = 11.20 })
+    val ScreenLocation = _ScreenLocation.asStateFlow()
+
+    fun changeScreenLocation(@FloatRange(from = -90.0, to= 90.0 ) latitude : Double, @FloatRange(from = -180.0, to= 180.0 ) longitude : Double ) {
+        _ScreenLocation.value.apply {
+            this.latitude = latitude
+            this.longitude = longitude
+        }
+    }
+
     private val _currentMsrMode = MutableStateFlow(Measure.phone)
     val currentMsrMode = _currentMsrMode.asStateFlow()
     fun setCurrentMsrMode(newMsrMode : Measure){
         _currentMsrMode.value = newMsrMode
     }
 
-    private val _centerOnUserLocation = MutableStateFlow(false)
-    val centerUserLocation = _centerOnUserLocation.asStateFlow()
-    fun centerOnUserLocation(){
-        _centerOnUserLocation.value = true
+    private val _centerOnScreenLocation = MutableStateFlow(true)
+    val centerOnScreenLocation = _centerOnScreenLocation.asStateFlow()
+    fun centerOnScreenLocation(){
+        _centerOnScreenLocation.value = true
     }
-    fun disableCenterOnUserLocation(){
-        _centerOnUserLocation.value = false
+    fun disableCenterOnScreenLocation(){
+        _centerOnScreenLocation.value = false
     }
     private val _searchBarText = MutableStateFlow("")
     val searchBarText = _searchBarText.asStateFlow()

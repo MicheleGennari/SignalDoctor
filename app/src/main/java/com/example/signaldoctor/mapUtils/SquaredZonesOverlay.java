@@ -157,8 +157,13 @@ public class SquaredZonesOverlay extends Overlay {
             }
 
             mProjection.getPixelFromTile(pX, pY, mTileRect);
-            //function that draws the square zones
-            onTileReadyToDraw(mCanvas, mTileRect, msrsMap.get(MapTileIndex.getZoom(pMapTileIndex)+"_"+MapTileIndex.getX(pMapTileIndex)+"_"+MapTileIndex.getY(pMapTileIndex)));
+
+            Double avg = msrsMap.get(MapTileIndex.getZoom(pMapTileIndex)+"_"+MapTileIndex.getX(pMapTileIndex)+"_"+MapTileIndex.getY(pMapTileIndex));
+            //function that draws the square zones, the last parameter is the avg value of the measurement for that tile
+
+            if(avg != null){
+                onTileReadyToDraw(mCanvas, mTileRect, avg);
+            }
             //onTileReadyToDraw(mCanvas, mTileRect, msrsMap.get("7_10_12"));
 
             if (Configuration.getInstance().isDebugTileProviders()) {
@@ -204,12 +209,12 @@ public class SquaredZonesOverlay extends Overlay {
         return gridPaint;
     }
 
-    protected void onTileReadyToDraw(final Canvas c, final Rect tileRect, @NonNull final Long avg) {
+    protected void onTileReadyToDraw(final Canvas c, final Rect tileRect, @NonNull final Double avg) {
         final Rect canvasRect = getCanvasRect();
         Paint paint = new Paint();
-        if(avg!= 32){
+        if(avg.equals(32)){
             paint.setColor(Color.RED);
-        }else if(avg == 84){
+        }else if(avg.equals(84)){
             paint.setColor(Color.BLUE);
         }else paint.setColor(Color.GREEN);
 

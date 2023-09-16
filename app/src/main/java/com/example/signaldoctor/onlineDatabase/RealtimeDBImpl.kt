@@ -35,21 +35,25 @@ class RealtimeDBImpl @Inject constructor(val db : FirebaseDatabase) : IMsrsOnlin
                 emit(hashMap)
             }*/
         return db.reference.child("averages/${msrType}").snapshots.map{ dataSnapshot ->
-            val hashMap = MsrsMap()
+            var hashMap = MsrsMap()
             dataSnapshot.children.forEach {entry ->
                 consoledebug("${msrType}: KEY:"+entry.key +", VALUE:"+ entry.value)
-                entry.key?.let {
-                    hashMap[it] = entry.value as Long }
+                entry.key?.let {tileindex->
+                    hashMap[tileindex] =  (entry.value as Long).toDouble()
+                }
             }
             hashMap
         }
 
     }
 
-    override fun postMsr(msrType: String, msr : Int, z : Int, x : Int, y : Int, zMax : Int, zMin : Int): Boolean {
+    override fun postMsr(msrType: String, msr : Double, z : Int, x : Int, y : Int, zMax : Int, zMin : Int): Boolean {
 
         ///this reference is the place where to store the measurement: e.g. measurements/phone/maptileid/
         val dbRef = db.getReference("measurements/${msrType}")
+
+
+
         return descendingPost(
             msrType= msrType,
             msr = msr,
@@ -76,7 +80,8 @@ class RealtimeDBImpl @Inject constructor(val db : FirebaseDatabase) : IMsrsOnlin
    Log.i("DEBUG:", msg)
 }
 
-fun descendingPost(msrType: String, msr : Int, z : Int, x : Int, y : Int, zMax: Int, dbRef : DatabaseReference) : Boolean {
+fun descendingPost(msrType: String, msr : Double, z : Int, x : Int, y : Int, zMax: Int, dbRef : DatabaseReference) : Boolean {
+
 
     if(z>zMax) return true
     else{
@@ -126,7 +131,7 @@ fun descendingPost(msrType: String, msr : Int, z : Int, x : Int, y : Int, zMax: 
     }
 }
 
-fun climbingPost(msrType: String, msr : Int, z : Int, x : Int, y : Int, zMin: Int = 0, dbRef : DatabaseReference) : Boolean{
+fun climbingPost(msrType: String, msr : Double, z : Int, x : Int, y : Int, zMin: Int = 0, dbRef : DatabaseReference) : Boolean{
     if(z <zMin) return true
     else {
         try{

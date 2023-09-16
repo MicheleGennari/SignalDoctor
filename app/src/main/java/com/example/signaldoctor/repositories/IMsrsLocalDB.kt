@@ -11,5 +11,5 @@ interface IMsrsLocalDB {
     fun getMsrsAvgs(msrType : Measure) : Flow<MsrsMap>
 
 
-    fun postMsr(msrType: String, msr : Int, z : Int, x : Int, y : Int, zMax : Int, zMin : Int ) : Boolean
+    fun postMsr(msrType: String, msr : Double, z : Int, x : Int, y : Int, zMax : Int, zMin : Int ) : Boolean
 }

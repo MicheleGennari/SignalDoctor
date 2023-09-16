@@ -1,9 +1,15 @@
 package com.example.signaldoctor.hiltModules
 
+import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioRecord
+import android.media.MediaRecorder
+import android.provider.MediaStore.Audio
 import android.telephony.TelephonyManager
+import androidx.core.app.ActivityCompat
 import androidx.work.WorkManager
 import com.example.signaldoctor.contracts.FirebaseContracts
 import com.example.signaldoctor.localDatabase.RoomDBImpl
@@ -25,6 +31,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.scopes.ViewModelScoped
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.views.MapView
+import java.lang.IllegalArgumentException
 import javax.inject.Qualifier
 
 @Qualifier
@@ -87,14 +94,19 @@ class ViewModelProvideModules {
 
     @ViewModelScoped
     @Provides
-    fun provideMicService(@ApplicationContext ctx : Context) : TelephonyManager {
+    fun providePhoneService(@ApplicationContext ctx : Context) : TelephonyManager {
         return ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
     }
 
+   /* @ViewModelScoped
+    @Provides
+    fun provideAudioRecorderService(@ApplicationContext ctx : Context) : Unit {
+        //probably not gonna use this provider
+    }*/
+
     @ViewModelScoped
     @Provides
-    fun provideWorkManager(@ApplicationContext ctx : Context) : WorkManager {
-       return WorkManager.getInstance(ctx)
-    }
+    fun provideWorkManager(@ApplicationContext ctx : Context) : WorkManager =
+        WorkManager.getInstance(ctx)
 
 }

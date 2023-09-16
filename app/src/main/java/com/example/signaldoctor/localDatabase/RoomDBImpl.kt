@@ -27,7 +27,7 @@ abstract class RoomDBImpl : RoomDatabase(), IMsrsLocalDB {
         TODO("Not yet implemented")
     }
 
-    override fun postMsr(msrType: String, msr : Int, z : Int, x : Int, y : Int, zMax : Int, zMin : Int ) : Boolean {
+    override fun postMsr(msrType: String, msr : Double, z : Int, x : Int, y : Int, zMax : Int, zMin : Int ) : Boolean {
         TODO("Not yet implemented")
     }
 }
