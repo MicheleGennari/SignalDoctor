@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.preference.PreferenceManager
 import android.telephony.TelephonyManager
 import androidx.annotation.FloatRange
 import androidx.core.app.ActivityCompat
@@ -31,9 +32,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.osmdroid.config.Configuration
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
+import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import javax.inject.Inject
 
 private val POST_MSR_WORK_TAG = "postMsrWOrkTag"
@@ -52,35 +61,58 @@ open class MyViewModel @Inject constructor(
 ) : ViewModel() {
 
 
-    val phoneAvgs = msrsRepo.getMergedAvgs(Measure.phone).stateIn(viewModelScope, started = SharingStarted.Eagerly, initialValue = MsrsMap())
-    val soundAvgs = msrsRepo.getMergedAvgs(Measure.sound).stateIn(viewModelScope, started = SharingStarted.Eagerly, initialValue = MsrsMap())
-    val wifiAvgs = msrsRepo.getMergedAvgs(Measure.wifi).stateIn(viewModelScope, started = SharingStarted.Eagerly, initialValue = MsrsMap())
+    val phoneAvgs = msrsRepo.getMergedAvgs(Measure.phone)
+        .stateIn(viewModelScope, started = SharingStarted.Eagerly, initialValue = MsrsMap())
+    val soundAvgs = msrsRepo.getMergedAvgs(Measure.sound)
+        .stateIn(viewModelScope, started = SharingStarted.Eagerly, initialValue = MsrsMap())
+    val wifiAvgs = msrsRepo.getMergedAvgs(Measure.wifi)
+        .stateIn(viewModelScope, started = SharingStarted.Eagerly, initialValue = MsrsMap())
 
     //private val _isGpsEnabled = MutableStateFlow(false)
-    val isGpsEnabled = locationProvider.isProviderAvailable().stateIn(viewModelScope, started = SharingStarted.Lazily, initialValue = false )
+    private val _isGpsEnabled = MutableStateFlow(false)
+    val isGpsEnabled = _isGpsEnabled.asStateFlow()
+    suspend fun checkifGpsIsAvailable(): Boolean {
+        _isGpsEnabled.value = locationProvider.isProviderAvailable()
+        return _isGpsEnabled.value
+    }
+
+    private val _userLocation = MutableStateFlow(Location("provider").apply {
+        latitude = 44.29
+        longitude = 11.20
+    }
+    )
+    val userlocation = _userLocation.asStateFlow()
+    suspend fun updateUserLocation(): Boolean {  //true if user location is retrieved, false otherwise
+
+        checkifGpsIsAvailable()
+        locationProvider.getCurrentLocation()?.let { location ->
+            _userLocation.value = location
+            return true
+
+        }
+        consoledebug("GPS disattivato")
+        return false
+    }
+
 
     private val _netWorkMode = MutableStateFlow(NetworkMode.ONLINE)
     val networkMode = _netWorkMode.asStateFlow()
 
-    fun changeNetWorkMode(newNetworkMode: NetworkMode){
+    fun changeNetWorkMode(newNetworkMode: NetworkMode) {
         _netWorkMode.value = newNetworkMode
     }
-/*
+    /*
 private val _userLocation =
 )
 */
-/*
+    /*
    private val _userLocation = MutableStateFlow(Location("provider").apply {
        latitude = 44.29
        longitude = 11.20
    })*/
-   val userlocation = locationProvider.getCurrentLocation().stateIn(
-    viewModelScope,
-    started = SharingStarted.WhileSubscribed(),
-    initialValue = Location("provider").apply { latitude = 44.29; longitude = 11.20 }
-   )
 
-/*    fun isGpsEnabled() = callbackFlow<Boolean>{
+
+    /*    fun isGpsEnabled() = callbackFlow<Boolean>{
         //val lm = app.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         if (app.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
             && ActivityCompat.checkSelfPermission(app, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -114,32 +146,40 @@ private val _userLocation =
         awaitClose()
     }*/
 
-    fun changeScreenLocation(@FloatRange(from = -90.0, to= 90.0 ) latitude : Double, @FloatRange(from = -180.0, to= 180.0 ) longitude : Double ){
+    fun changeScreenLocation(
+        @FloatRange(from = -90.0, to = 90.0) latitude: Double,
+        @FloatRange(from = -180.0, to = 180.0) longitude: Double
+    ) {
         mapScreenUiState.changeScreenLocation(latitude, longitude)
     }
 
-    fun setUserLocationAsScreenLocation(){
-        //getUserLocation()
-        userlocation.value.run{
-            mapScreenUiState.changeScreenLocation(latitude,longitude) }
-        centerOnScreenLocation()
+    fun setUserLocationAsScreenLocation() {
+        viewModelScope.launch {
+            if (updateUserLocation()) {
+                consoledebug("PROCA")
+                userlocation.value.run {
+                    mapScreenUiState.changeScreenLocation(latitude, longitude)
+                    centerOnScreenLocation()
+                }
+            }
+        }
     }
 
 
-    fun centerOnScreenLocation(){
+    fun centerOnScreenLocation() {
         mapScreenUiState.centerOnScreenLocation()
         mapScreenUiState.updateSearchBarText("${userlocation.value.latitude}, ${userlocation.value.longitude}")
     }
 
-    fun setUserLocationFromQueryString(query : String){
-        val longitude : Double?
-        val latitude :  Double?
+    fun setUserLocationFromQueryString(query: String) {
+        val longitude: Double?
+        val latitude: Double?
         query.split(",").run {
             latitude = firstOrNull()?.toDoubleOrNull()
             longitude = getOrNull(1)?.toDoubleOrNull()
         }
-        if(latitude != null && longitude != null){
-            changeScreenLocation(latitude,longitude)
+        if (latitude != null && longitude != null) {
+            changeScreenLocation(latitude, longitude)
             mapScreenUiState.centerOnScreenLocation()
         }
     }
@@ -152,9 +192,13 @@ private val _userLocation =
     @SuppressLint("SuspiciousIndentation")
     // according to Measuring state, work will be executed persistently in background (background mode) or
     // until
-    fun sendMeasures(msrType : Measure, timeInterval : Long = 15, measuringMode : MeasuringState = MeasuringState.RUNNING){
+    fun sendMeasures(
+        msrType: Measure,
+        timeInterval: Long = 15,
+        measuringMode: MeasuringState = MeasuringState.RUNNING
+    ) {
 
-        viewModelScope.launch(Dispatchers.Default){
+        viewModelScope.launch(Dispatchers.Default) {
             /*msrsRepo.onlineDB.postMsr(
                 msrType = msrType.name,
                 msr = 125.7,
@@ -178,9 +222,9 @@ private val _userLocation =
             .build())*/
     }
 
-    fun stopMeasuring(){
+    fun stopMeasuring() {
         val currentMeasuringState = mapScreenUiState.measuringState.value
-        if(
+        if (
             (currentMeasuringState == MeasuringState.RUNNING)
             || (currentMeasuringState == MeasuringState.BACKGROUND)
         ) {
@@ -189,14 +233,20 @@ private val _userLocation =
         }
     }
 
-    fun changeMeasuringState(newMsrState : MeasuringState) = run {
+    fun changeMeasuringState(newMsrState: MeasuringState) = run {
         mapScreenUiState.changeMeasuringState(newMsrState)
     }
 
     init {
 
-        setUserLocationAsScreenLocation()
-        //getUserLocation()
+        viewModelScope.launch {
+            Configuration.getInstance().load(app, PreferenceManager.getDefaultSharedPreferences(app))
+            setUserLocationAsScreenLocation()
+
+            //getUserLocation()
+        }
+
+        this.onCleared()
     }
 }
 

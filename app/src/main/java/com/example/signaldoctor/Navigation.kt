@@ -19,7 +19,7 @@ class MainActivity : ComponentActivity() {
     val viewModel: MyViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        getInstance().load(this,PreferenceManager.getDefaultSharedPreferences(this))
+
         setContent {
             NavHost(
                 navController = rememberNavController() ,
