@@ -6,13 +6,9 @@ import com.example.signaldoctor.contracts.MsrsMap
 import com.example.signaldoctor.repositories.IMsrsOnlineDB
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ktx.childEvents
 import com.google.firebase.database.ktx.snapshots
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.take
 import javax.inject.Inject
 
 class RealtimeDBImpl @Inject constructor(val db : FirebaseDatabase) : IMsrsOnlineDB {
@@ -35,7 +31,7 @@ class RealtimeDBImpl @Inject constructor(val db : FirebaseDatabase) : IMsrsOnlin
                 emit(hashMap)
             }*/
         return db.reference.child("averages/${msrType}").snapshots.map{ dataSnapshot ->
-            var hashMap = MsrsMap()
+            val hashMap = MsrsMap()
             dataSnapshot.children.forEach {entry ->
                 consoledebug("${msrType}: KEY:"+entry.key +", VALUE:"+ entry.value)
                 entry.key?.let {tileindex->

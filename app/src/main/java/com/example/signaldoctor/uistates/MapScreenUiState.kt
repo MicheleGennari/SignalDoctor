@@ -19,11 +19,10 @@ import javax.inject.Inject
 class MapScreenUiState @Inject constructor(
 ) {
 
-    private val _ScreenLocation = MutableStateFlow(Location("provider").apply { latitude = 44.22; longitude = 11.20 })
-    val ScreenLocation = _ScreenLocation.asStateFlow()
-
+    private val _screenLocation = MutableStateFlow(Location("provider").apply { latitude = 44.22; longitude = 11.20 })
+    val screenLocation = _screenLocation.asStateFlow()
     fun changeScreenLocation(@FloatRange(from = -90.0, to= 90.0 ) latitude : Double, @FloatRange(from = -180.0, to= 180.0 ) longitude : Double ) {
-        _ScreenLocation.value.apply {
+        _screenLocation.value.apply {
             this.latitude = latitude
             this.longitude = longitude
         }
@@ -39,10 +38,14 @@ class MapScreenUiState @Inject constructor(
     val centerOnScreenLocation = _centerOnScreenLocation.asStateFlow()
     fun centerOnScreenLocation(){
         _centerOnScreenLocation.value = true
+        screenLocation.value.run{
+            updateSearchBarText(latitude.toString()+", "+longitude.toString())
+        }
     }
     fun disableCenterOnScreenLocation(){
         _centerOnScreenLocation.value = false
     }
+
     private val _searchBarText = MutableStateFlow("")
     val searchBarText = _searchBarText.asStateFlow()
     fun updateSearchBarText(updatedText: String){
@@ -55,19 +58,4 @@ class MapScreenUiState @Inject constructor(
         _measuringState.value = newMeasuringState
     }
 
-
-
-
 }
-/*
-object measuringStates {
-    val STOPPED = 0
-    val RUNNING = 1
-    val BACKGROUND = 2
-}
-
-object ActiveOverlayStates {
-    val PHONE = 0
-    val NOISE = 1
-    val WIFI = 2
-}*/

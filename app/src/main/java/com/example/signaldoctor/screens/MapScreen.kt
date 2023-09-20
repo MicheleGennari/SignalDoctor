@@ -1,23 +1,17 @@
 package com.example.signaldoctor.screens
 
-import android.content.pm.PackageManager
-import android.telephony.CarrierConfigManager.Gps
-import androidx.compose.animation.Crossfade
+import android.location.Location
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DockedSearchBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,23 +25,19 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.modifier.modifierLocalConsumer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
 import com.example.signaldoctor.R
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
@@ -61,10 +51,11 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
+import kotlin.coroutines.coroutineContext
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -74,6 +65,7 @@ fun MapScreen(
     ){
     SignalDoctorTheme {
 
+
         val networkMode = viewModel.networkMode.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED)
 
         val locationPermission = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION){
@@ -82,19 +74,17 @@ fun MapScreen(
             false -> consoledebug("Permission DENIED")
             }
         }
-        val isGpsEnabled by viewModel.isGpsEnabled.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED)
         val recordPermission = rememberPermissionState(permission = android.Manifest.permission.RECORD_AUDIO){
                 isGranted -> when(isGranted) {
             true -> consoledebug("Permission GRANTED")
             false -> consoledebug("Permission DENIED")
             }
         }
+        val screenLocation by viewModel.mapScreenUiState.screenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
 
-
-        val screenLocation by viewModel.mapScreenUiState.ScreenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
-        val userLocation by viewModel.userlocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED )
+        val userLocation by viewModel.userLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED )
         val searchBarText by viewModel.mapScreenUiState.searchBarText.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
-        val centerOnScreenLocation by viewModel.mapScreenUiState.centerOnScreenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
+        val centerOnScreenLocation by viewModel.mapScreenUiState.centerOnScreenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
 
         val soundAvgs by viewModel.soundAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
         val phoneAvgs by viewModel.phoneAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
@@ -112,7 +102,7 @@ fun MapScreen(
                     onQueryChange = {updatedText->
                                         viewModel.mapScreenUiState.updateSearchBarText(updatedText)
                                     },
-                    onSearch = {query -> viewModel.setUserLocationFromQueryString(query)}
+                    onSearch = {query -> viewModel.setScreenLocationFromQueryString(query)}
                 )
             },
 
@@ -125,10 +115,11 @@ fun MapScreen(
                     wifiAvgs = wifiAvgs,
                     currentMsrMode = currentMsrMode,
                     locationPermission = locationPermission,
-                    isGpsEnabled = isGpsEnabled,
-                    currentUserLocation = screenLocation,
+                    userLocation = userLocation,
+                    screenLocation= screenLocation,
                     centerOnUserLocation = centerOnScreenLocation,
                     disableCenterOnUserLocation = {viewModel.mapScreenUiState.disableCenterOnScreenLocation()},
+                    updateSearchBarText = {viewModel.mapScreenUiState.updateSearchBarText(it) }
                 )
             },
 
@@ -137,7 +128,9 @@ fun MapScreen(
                     modifier= Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.Bottom
                 ){
+
                     UserLocationButton(
+                        modifier= Modifier,
                         onClick = {
                             if (!locationPermission.status.isGranted)
                                 locationPermission.launchPermissionRequest()
@@ -208,11 +201,13 @@ fun Map(
     soundAvgs : MsrsMap,
     wifiAvgs : MsrsMap,
     locationPermission : PermissionState,
-    isGpsEnabled : Boolean = false,
-    currentUserLocation : android.location.Location,
+    userLocation : android.location.Location?,
+    screenLocation : Location,
     centerOnUserLocation : Boolean = false,
     disableCenterOnUserLocation : () -> Unit = {},
+    updateSearchBarText : (String) -> Unit = {},
 ) {
+    val composableScope = rememberCoroutineScope()
 
     AndroidView(
         modifier = modifier,
@@ -224,11 +219,11 @@ fun Map(
                     //THE ADD OF THE MARKER HAS TO BE THE FIRST, BECAUSE IT WILL BE REFERRED LATELY BY ITS
                     // INDEX/POSITION IN THE LIST,
                     //////////////////////////////////
-                    if(locationPermission.status.isGranted && isGpsEnabled){
+                    if(locationPermission.status.isGranted && userLocation!=null){
                         add(GpsMarker(map).apply {
                             position = GeoPoint(
-                                currentUserLocation.latitude,
-                                currentUserLocation.longitude
+                                userLocation.latitude,
+                                userLocation.longitude
                             )
                         })
                     }
@@ -236,32 +231,32 @@ fun Map(
                 }
                 controller.run {
                     setZoom(12.5)
-                    setCenter(GeoPoint(52.520008, 13.404954))
+                    setCenter(GeoPoint(screenLocation.latitude, screenLocation.longitude))
                 }
             }
         },
 
-        update = {
-            consoledebug("updating Map... ${isGpsEnabled}")
+        ) {map->
+
+        composableScope.launch{
             map.run {
                 overlays.run {
 
 
-
-                    if(locationPermission.status.isGranted && isGpsEnabled){
+                    if (locationPermission.status.isGranted && userLocation != null) {
                         consoledebug("add Marker")
-                        forEachIndexed{ index, overlay ->
+                        forEachIndexed { index, overlay ->
                             if (overlay is GpsMarker) removeAt(index)
                         }
                         add(GpsMarker(map).apply {
                             position.setCoords(
-                                currentUserLocation.latitude,
-                                currentUserLocation.longitude
+                                userLocation.latitude,
+                                userLocation.longitude
                             )
                         })
-                    }else{
+                    } else {
                         consoledebug("Delete Marker")
-                        forEachIndexed{ index, overlay ->
+                        forEachIndexed { index, overlay ->
                             if (overlay is GpsMarker) removeAt(index)
                         }
                     }
@@ -279,17 +274,24 @@ fun Map(
 
                 controller.run {
                     if (centerOnUserLocation) {
-                        if(zoomLevelDouble <15.5) {
+                        if (zoomLevelDouble < 15.5)
                             zoomTo(16.8)
+
+                        screenLocation.run{
+                            animateTo(
+                                GeoPoint(latitude, longitude),
+                                16.6,
+                                500
+                            )
+                            updateSearchBarText("${latitude}, ${longitude}")
                         }
-                        animateTo(GeoPoint(currentUserLocation.latitude, currentUserLocation.longitude),16.6, 500)
                         disableCenterOnUserLocation()
                     }
                 }
                 invalidate()
             }
-        },
-    )
+        }
+    }
 }
 
 /*@OptIn(ExperimentalMaterial3Api::class)
@@ -372,7 +374,7 @@ fun UserLocationButton(
     onClick: () -> Unit = {}
     ){
     FloatingActionButton(
-        modifier = Modifier
+        modifier = modifier
             .size(80.dp)
             .padding(start = 30.dp, top = 10.dp),
         onClick = onClick,

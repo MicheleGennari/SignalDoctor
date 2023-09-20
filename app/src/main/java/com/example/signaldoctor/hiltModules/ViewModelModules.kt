@@ -18,6 +18,7 @@ import com.example.signaldoctor.repositories.IMsrsLocalDB
 import com.example.signaldoctor.repositories.IMsrsOnlineDB
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.SettingsClient
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ktx.database
 import com.google.firebase.ktx.Firebase
@@ -46,6 +47,10 @@ annotation class RoomDatabase
 @Retention(AnnotationRetention.BINARY)
 annotation class MapnikMap
 
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class DefaultTileMap
+
 @Module
 @InstallIn(ViewModelComponent::class)
 abstract class viewModelBindModules {
@@ -58,8 +63,7 @@ abstract class viewModelBindModules {
     @RoomDatabase
     @ViewModelScoped
     @Binds
-    abstract fun provideRoomDB(db : RoomDBImpl) : IMsrsLocalDB
-
+    abstract fun bindRoomDB(db : RoomDBImpl) : IMsrsLocalDB
 
 
 
@@ -83,6 +87,15 @@ class ViewModelProvideModules {
         return MapView(ctx).apply {
             setTileSource(TileSourceFactory.MAPNIK)
         }
+    }
+
+        @DefaultTileMap
+        @ViewModelScoped
+        @Provides
+        fun provideDefaultMap(@ApplicationContext ctx: Context): MapView {
+            return MapView(ctx).apply {
+                setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE)
+            }
 
     }
 
@@ -94,15 +107,17 @@ class ViewModelProvideModules {
 
     @ViewModelScoped
     @Provides
+    fun provideFusedLocationProviderSettingsClient(@ApplicationContext ctx: Context) : SettingsClient {
+        return LocationServices.getSettingsClient(ctx)
+    }
+
+
+    @ViewModelScoped
+    @Provides
     fun providePhoneService(@ApplicationContext ctx : Context) : TelephonyManager {
         return ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
     }
 
-   /* @ViewModelScoped
-    @Provides
-    fun provideAudioRecorderService(@ApplicationContext ctx : Context) : Unit {
-        //probably not gonna use this provider
-    }*/
 
     @ViewModelScoped
     @Provides

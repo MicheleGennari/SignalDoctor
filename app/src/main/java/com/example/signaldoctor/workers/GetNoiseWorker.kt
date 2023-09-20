@@ -6,10 +6,8 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.provider.MediaStore.Audio
 import androidx.core.app.ActivityCompat
 import androidx.work.CoroutineWorker
-import androidx.work.ListenableWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.example.signaldoctor.onlineDatabase.consoledebug
@@ -49,7 +47,7 @@ fun work(ctx : Context) : Long {
         if(micRecorder?.state == AudioRecord.STATE_UNINITIALIZED) {
             consoledebug("AudioRecorder object's state has value 'UNINITIALIZED. Probably there is a problem with creation" +
                     "parameters not compliant with device's hardware capabilities ")
-            micRecorder?.release()
+            micRecorder.release()
             micRecorder = null
             consoledebug("recorde uninitialized")
             return NoiseResult.failure()

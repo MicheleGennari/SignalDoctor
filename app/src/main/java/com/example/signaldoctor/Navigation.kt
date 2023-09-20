@@ -12,6 +12,7 @@ import com.example.signaldoctor.contracts.DestinationsInfo
 import com.example.signaldoctor.screens.MapScreen
 import com.example.signaldoctor.viewModels.MyViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import org.osmdroid.config.Configuration
 import org.osmdroid.config.Configuration.getInstance
 
 @AndroidEntryPoint
@@ -19,7 +20,7 @@ class MainActivity : ComponentActivity() {
     val viewModel: MyViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
+        Configuration.getInstance().load(applicationContext, PreferenceManager.getDefaultSharedPreferences(applicationContext))
         setContent {
             NavHost(
                 navController = rememberNavController() ,
