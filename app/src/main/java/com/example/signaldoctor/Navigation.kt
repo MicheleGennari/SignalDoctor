@@ -44,5 +44,6 @@ class MainActivity : ComponentActivity() {
         super.onPause()
         viewModel.map.onPause()
     }
+
 }
 

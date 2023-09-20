@@ -45,10 +45,10 @@ const val LOCATION_INTERVAL = 5000L
 const val LOCATION_PRIORITY = Priority.PRIORITY_BALANCED_POWER_ACCURACY
 @HiltViewModel
 open class MyViewModel @Inject constructor(
-    private val msrsRepo: MsrsRepo,
+    msrsRepo: MsrsRepo,
     val mapScreenUiState: MapScreenUiState,
     @DefaultTileMap val map : MapView,
-    private val locationProvider : FlowLocationProvider,
+    locationProvider : FlowLocationProvider,
     private val workManager: WorkManager,
     private val telephonyMngr : TelephonyManager,
 ) : ViewModel() {
@@ -166,6 +166,12 @@ open class MyViewModel @Inject constructor(
     init{
             setUserLocationAsScreenLocation()
     }
+
+    override fun onCleared() {
+        map.onDetach()
+        super.onCleared()
+    }
+
 }
 
 /*
