@@ -1,6 +1,6 @@
 package com.example.signaldoctor.workers
 
-object WorkersKeysContract {
+object MsrWorkersKeysContract {
     const val MSR_TYPE_KEY = "msrType"
     const val MSR_KEY = "msr"
     const val Z_KEY = "z"

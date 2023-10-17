@@ -1,4 +1,4 @@
-package com.example.signaldoctor.mapUtils
+package com.example.signaldoctor.appComponents
 
 import android.Manifest
 import android.annotation.SuppressLint

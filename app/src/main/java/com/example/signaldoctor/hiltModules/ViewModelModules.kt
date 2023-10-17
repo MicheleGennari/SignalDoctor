@@ -3,19 +3,28 @@ package com.example.signaldoctor.hiltModules
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.SensorManager
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.HardwarePropertiesManager
 import android.provider.MediaStore.Audio
 import android.telephony.TelephonyManager
 import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.work.OneTimeWorkRequest
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import com.example.signaldoctor.contracts.FirebaseContracts
 import com.example.signaldoctor.localDatabase.RoomDBImpl
 import com.example.signaldoctor.onlineDatabase.RealtimeDBImpl
 import com.example.signaldoctor.repositories.IMsrsLocalDB
 import com.example.signaldoctor.repositories.IMsrsOnlineDB
+import com.example.signaldoctor.workers.NoiseMsrWorker
+import com.example.signaldoctor.workers.PhoneMsrWorker
+import com.example.signaldoctor.workers.WifiMsrWorker
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.SettingsClient
@@ -115,7 +124,15 @@ class ViewModelProvideModules {
     @ViewModelScoped
     @Provides
     fun providePhoneService(@ApplicationContext ctx : Context) : TelephonyManager {
+
         return ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+    }
+
+    @ViewModelScoped
+    @Provides
+    fun provideAudioManager(@ApplicationContext ctx : Context) : AudioManager {
+
+        return ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
 
 
@@ -123,5 +140,11 @@ class ViewModelProvideModules {
     @Provides
     fun provideWorkManager(@ApplicationContext ctx : Context) : WorkManager =
         WorkManager.getInstance(ctx)
+
+
+    @ViewModelScoped
+    @Provides
+    fun provideNotificationManager(@ApplicationContext ctx : Context) : NotificationManagerCompat =
+        NotificationManagerCompat.from(ctx)
 
 }

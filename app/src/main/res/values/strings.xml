@@ -1,3 +1,6 @@
 <resources>
-    <string name="app_name">SignalDoctor</string>
+    <string name="app_name"> SignalDoctor </string>
+    <string name="measurements_channel_name">Measurements</string>
+    <string name="noise_measurement_notification_content_title">Measuring Noise...</string>
+    <string name="measurement_channel_description">Notifications about measurements states,\nvalues and results.</string>
 </resources>

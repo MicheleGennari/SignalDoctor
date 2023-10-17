@@ -2,7 +2,6 @@ package com.example.signaldoctor.screens
 
 import android.location.Location
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,18 +23,18 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.signaldoctor.R
@@ -46,16 +45,14 @@ import com.example.signaldoctor.mapUtils.GpsMarker
 import com.example.signaldoctor.mapUtils.SquaredZonesOverlay
 import com.example.signaldoctor.onlineDatabase.consoledebug
 import com.example.signaldoctor.ui.theme.SignalDoctorTheme
-import com.example.signaldoctor.viewModels.MyViewModel
+import com.example.signaldoctor.appComponents.viewModels.MyViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
-import kotlin.coroutines.coroutineContext
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -65,8 +62,6 @@ fun MapScreen(
     ){
     SignalDoctorTheme {
 
-
-        val networkMode = viewModel.networkMode.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED)
 
         val locationPermission = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION){
             isGranted -> when(isGranted) {
@@ -80,18 +75,18 @@ fun MapScreen(
             false -> consoledebug("Permission DENIED")
             }
         }
-        val screenLocation by viewModel.mapScreenUiState.screenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
+        val screenLocation by viewModel.mapScreenUiState.screenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val userLocation by viewModel.userLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED )
 
-        val userLocation by viewModel.userLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED )
-        val searchBarText by viewModel.mapScreenUiState.searchBarText.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
+        val searchBarText by viewModel.mapScreenUiState.searchBarText.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
         val centerOnScreenLocation by viewModel.mapScreenUiState.centerOnScreenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
 
-        val soundAvgs by viewModel.soundAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
-        val phoneAvgs by viewModel.phoneAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
-        val wifiAvgs by viewModel.wifiAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
+        val soundAvgs by viewModel.soundAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val phoneAvgs by viewModel.phoneAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val wifiAvgs by viewModel.wifiAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
 
-        val currentMsrMode by viewModel.mapScreenUiState.currentMsrMode.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
-        val currentMeasuringState by viewModel.mapScreenUiState.measuringState.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
+        val currentMsrType by viewModel.mapScreenUiState.currentMsrType.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val currentMeasuringState by viewModel.mapScreenUiState.measuringState.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
 
         Scaffold(
             topBar = {
@@ -113,7 +108,7 @@ fun MapScreen(
                     soundAvgs = soundAvgs,
                     phoneAvgs = phoneAvgs,
                     wifiAvgs = wifiAvgs,
-                    currentMsrMode = currentMsrMode,
+                    currentMsrMode = currentMsrType,
                     locationPermission = locationPermission,
                     userLocation = userLocation,
                     screenLocation= screenLocation,
@@ -121,20 +116,25 @@ fun MapScreen(
                     disableCenterOnUserLocation = {viewModel.mapScreenUiState.disableCenterOnScreenLocation()},
                     updateSearchBarText = {viewModel.mapScreenUiState.updateSearchBarText(it) }
                 )
+
             },
 
             floatingActionButton = {
                 Row(
-                    modifier= Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Bottom
+                    modifier= Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 30.dp),
+                    verticalAlignment = Alignment.Bottom,
                 ){
 
                     UserLocationButton(
-                        modifier= Modifier,
+                        modifier= Modifier.size(40.dp),
+                        enabled =  userLocation!=null,
                         onClick = {
                             if (!locationPermission.status.isGranted)
                                 locationPermission.launchPermissionRequest()
                             else
+                                if(userLocation!=null)
                                 viewModel.setUserLocationAsScreenLocation()
                         }
                     )
@@ -142,31 +142,22 @@ fun MapScreen(
                     MeasuringButton(
                         modifier = Modifier
                             .size(100.dp)
-                            .offset(80.dp),
+                            .offset(75.dp),
                         measuringState = currentMeasuringState,
                         onClick = {
                             when(currentMeasuringState){
                                 MeasuringState.STOP -> {
 
-                                    when(currentMsrMode){
-                                        Measure.wifi -> {
-                                            viewModel.changeMeasuringState(MeasuringState.RUNNING)
-                                        }
-                                        Measure.sound -> {
-                                            if(recordPermission.status.isGranted) {
-                                                viewModel.sendMeasures(currentMsrMode, 1L, MeasuringState.RUNNING)
-                                                viewModel.changeMeasuringState(MeasuringState.RUNNING)
-                                            }
-                                            else
-                                                recordPermission.launchPermissionRequest()
-                                        }
-                                        Measure.phone -> {
-                                            viewModel.changeMeasuringState(MeasuringState.RUNNING)
-                                        }
+                                    if(currentMsrType == Measure.sound && !recordPermission.status.isGranted)
+                                        recordPermission.launchPermissionRequest()
+                                    else {
+                                        //viewModel.runNoiseMeasurementDebug()
+                                        viewModel.runMeasurement(currentMsrType)
+                                        viewModel.changeMeasuringState(MeasuringState.RUNNING)
                                     }
                                 }
                                 MeasuringState.RUNNING -> {
-                                    viewModel.stopMeasuring()
+                                    viewModel.cancelMeasurement(currentMsrType)
                                     viewModel.changeMeasuringState(MeasuringState.STOP)
                                 }
                                 MeasuringState.BACKGROUND -> viewModel.changeMeasuringState(MeasuringState.STOP)
@@ -178,10 +169,10 @@ fun MapScreen(
 
             bottomBar = {
                 MsrsBar(
-                  currentMsrMode = currentMsrMode,
+                  currentMsrMode = currentMsrType,
                   changeCurrentMsrMode = {newMode ->
+                      viewModel.cancelAllMeasurements()
                       viewModel.mapScreenUiState.setCurrentMsrMode(newMode)
-                      viewModel.stopMeasuring()
                   }
                 )
             }
@@ -201,7 +192,7 @@ fun Map(
     soundAvgs : MsrsMap,
     wifiAvgs : MsrsMap,
     locationPermission : PermissionState,
-    userLocation : android.location.Location?,
+    userLocation : Location?,
     screenLocation : Location,
     centerOnUserLocation : Boolean = false,
     disableCenterOnUserLocation : () -> Unit = {},
@@ -238,10 +229,8 @@ fun Map(
 
         ) {map->
 
-        composableScope.launch{
             map.run {
                 overlays.run {
-
 
                     if (locationPermission.status.isGranted && userLocation != null) {
                         consoledebug("add Marker")
@@ -267,6 +256,7 @@ fun Map(
                             Measure.sound.ordinal -> overlay.setMsrsMap(soundAvgs)
                             Measure.wifi.ordinal -> overlay.setMsrsMap(wifiAvgs)
                         }
+
                         //Take all measures overlays and disable them if they're not of the current selected measure type
                         overlay.isEnabled = if (index == currentMsrMode.ordinal) true else false
                     }
@@ -290,7 +280,7 @@ fun Map(
                 }
                 invalidate()
             }
-        }
+        consoledebug("CRASH TEST")
     }
 }
 
@@ -371,16 +361,18 @@ fun SearchBar(
 fun UserLocationButton(
     modifier: Modifier = Modifier,
     shape : Shape = CircleShape,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    enabled : Boolean = false
     ){
     FloatingActionButton(
-        modifier = modifier
-            .size(80.dp)
-            .padding(start = 30.dp, top = 10.dp),
-        onClick = onClick,
-        shape = CircleShape
+        modifier = Modifier,
+        onClick = if(enabled) onClick else {->},
+        shape = CircleShape,
+        containerColor = if(enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.background,
+        contentColor = if(enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
     ) {
         Icon(
+            modifier = modifier,
             painter = painterResource(id = R.drawable.location_button),
             contentDescription = "get location button",
         )

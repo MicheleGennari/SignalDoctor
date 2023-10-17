@@ -1,39 +1,38 @@
-package com.example.signaldoctor.viewModels
+package com.example.signaldoctor.appComponents.viewModels
 
-import android.annotation.SuppressLint
 import android.content.Context
-import android.location.Location
-import android.preference.PreferenceManager
+import android.media.AudioManager
 import android.telephony.TelephonyManager
 import androidx.annotation.FloatRange
+import androidx.core.app.NotificationChannelCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.WorkManager
-import com.example.signaldoctor.contracts.NetworkMode
+import com.example.signaldoctor.R
+import com.example.signaldoctor.appComponents.FlowLocationProvider
+import com.example.signaldoctor.appComponents.MsrsWorkManager
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
 import com.example.signaldoctor.contracts.MsrsMap
+import com.example.signaldoctor.contracts.NetworkMode
 import com.example.signaldoctor.hiltModules.DefaultTileMap
-import com.example.signaldoctor.hiltModules.MapnikMap
-import com.example.signaldoctor.mapUtils.FlowLocationProvider
-import com.example.signaldoctor.mapUtils.FlowLocationProvider_Factory
 import com.example.signaldoctor.onlineDatabase.consoledebug
 import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.uistates.MapScreenUiState
+import com.example.signaldoctor.workers.MsrWorkersInputData
 import com.example.signaldoctor.workers.work
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.Priority
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import dagger.hilt.android.scopes.ViewModelScoped
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import org.osmdroid.config.Configuration
 import org.osmdroid.views.MapView
+import java.util.concurrent.Executors
 import javax.inject.Inject
 
 const val POST_MSR_WORK_TAG = "postMsrWOrkTag"
@@ -43,14 +42,18 @@ const val POST_MSR_BACKGROUND_WORK_NAME = "postMsrBackgroundWork"
 const val LOCATION_GRANULARITY = 2000
 const val LOCATION_INTERVAL = 5000L
 const val LOCATION_PRIORITY = Priority.PRIORITY_BALANCED_POWER_ACCURACY
+
+const val MEASUREMENT_NOTIFICATION_CHANNEL_ID = "MEASUREMENT_CHANNEL"
+
 @HiltViewModel
 open class MyViewModel @Inject constructor(
     msrsRepo: MsrsRepo,
     val mapScreenUiState: MapScreenUiState,
     @DefaultTileMap val map : MapView,
-    locationProvider : FlowLocationProvider,
-    private val workManager: WorkManager,
-    private val telephonyMngr : TelephonyManager,
+    val locationProvider : FlowLocationProvider,
+    private val msrsWorkManager: MsrsWorkManager,
+    private val notificationManager : NotificationManagerCompat,
+    @ApplicationContext private val app : Context
 ) : ViewModel() {
 
 
@@ -63,9 +66,19 @@ open class MyViewModel @Inject constructor(
 
 
     val userLocation = locationProvider.requestLocationUpdates(
-        LocationRequest.Builder(LOCATION_INTERVAL).setPriority(LOCATION_PRIORITY).build()
-    ).stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null )
+        LocationRequest.Builder(LOCATION_INTERVAL).setPriority(LOCATION_PRIORITY)
+            .build()
+    ).stateIn(scope = viewModelScope, started= SharingStarted.WhileSubscribed(), initialValue = null)
+    private var locationUpdatesJob : Job? = null
 
+    fun locationUpdatesOn() {
+        TODO()
+    }
+    fun locationUpdatesOff(){
+        locationUpdatesJob?.run {
+            cancel("location updates off")
+        }
+    }
 
 
     private val _netWorkMode = MutableStateFlow(NetworkMode.ONLINE)
@@ -74,8 +87,6 @@ open class MyViewModel @Inject constructor(
     fun changeNetWorkMode(newNetworkMode: NetworkMode) {
         _netWorkMode.value = newNetworkMode
     }
-
-
 
     fun changeScreenLocation(
         @FloatRange(from = -90.0, to = 90.0) latitude: Double,
@@ -93,7 +104,7 @@ open class MyViewModel @Inject constructor(
     }
 
 
-    fun centerOnScreenLocation() {
+     fun centerOnScreenLocation() {
         mapScreenUiState.centerOnScreenLocation()
         mapScreenUiState.updateSearchBarText("${userLocation.value?.latitude}, ${userLocation.value?.longitude}")
     }
@@ -111,52 +122,36 @@ open class MyViewModel @Inject constructor(
         }
     }
 
-
     /////////////////////////////////////////////////
-    //////////////DATABASE OPERATIONS///////////////
+    //////////////MEASUREMENTS OPERATIONS///////////
     ///////////////////////////////////////////////
 
-    @SuppressLint("SuspiciousIndentation")
-    // according to Measuring state, work will be executed persistently in background (background mode) or
-    // until
-    fun sendMeasures(
-        msrType: Measure,
-        timeInterval: Long = 15,
-        measuringMode: MeasuringState = MeasuringState.RUNNING
-    ) {
 
-        viewModelScope.launch(Dispatchers.Default) {
-            /*msrsRepo.onlineDB.postMsr(
-                msrType = msrType.name,
-                msr = 125.7,
-                7, 10, 12,
-                19, 3
-            )*/
-            changeMeasuringState(MeasuringState.STOP)
-        }
-        /*workManager.enqueue(OneTimeWorkRequestBuilder<PostMsrWorker>()
-            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-            .setInputData(workDataOf(
-                WorkersKeysContract.MSR_TYPE_KEY to msrType.name,
-                WorkersKeysContract.MSR_KEY to 125.7,
-                WorkersKeysContract.Z_KEY to 7,
-                WorkersKeysContract.X_KEY to 10,
-                WorkersKeysContract.Y_KEY to 12,
-                WorkersKeysContract.Z_MAX_KEY to 19,
-                WorkersKeysContract.Z_MIN_KEY to 3
-            ))
-            .build())*/
+    fun runMeasurement(msrType: Measure){
+        msrsWorkManager.runMeasurement(
+            MsrWorkersInputData(
+                msrType = msrType,
+                x = map.mapCenterOffsetX,
+                y = map.mapCenterOffsetY,
+                z = map.zoomLevelDouble.toInt(),
+                zMax = map.maxZoomLevel.toInt(),
+                zMin = map.minZoomLevel.toInt()
+            )
+        )
     }
 
-    fun stopMeasuring() {
-        val currentMeasuringState = mapScreenUiState.measuringState.value
-        if (
-            (currentMeasuringState == MeasuringState.RUNNING)
-            || (currentMeasuringState == MeasuringState.BACKGROUND)
-        ) {
-            workManager.cancelUniqueWork(POST_MSR_ACTIVE_WORK_NAME)
-            mapScreenUiState.changeMeasuringState(MeasuringState.STOP)
+    fun runNoiseMeasurementDebug(){
+        Executors.newSingleThreadExecutor().submit{
+            work(app)
         }
+    }
+
+    fun cancelMeasurement(msrType : Measure){
+        msrsWorkManager.cancelMeasurement(msrType)
+    }
+
+    fun cancelAllMeasurements(){
+        msrsWorkManager.cancelAllMeasurements()
     }
 
     fun changeMeasuringState(newMsrState: MeasuringState) = run {
@@ -164,11 +159,24 @@ open class MyViewModel @Inject constructor(
     }
 
     init{
-            setUserLocationAsScreenLocation()
+
+        setUserLocationAsScreenLocation()
+        notificationManager.createNotificationChannel(
+
+            NotificationChannelCompat.Builder(
+                MEASUREMENT_NOTIFICATION_CHANNEL_ID,
+                NotificationManagerCompat.IMPORTANCE_HIGH
+            ).apply {
+
+                setName(app.getString(R.string.measurements_channel_name))
+                setDescription(app.getString(R.string.measurement_channel_description))
+
+            }.build()
+        )
+
     }
 
     override fun onCleared() {
-        map.onDetach()
         super.onCleared()
     }
 

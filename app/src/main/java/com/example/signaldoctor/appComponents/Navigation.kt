@@ -1,4 +1,4 @@
-package com.example.signaldoctor
+package com.example.signaldoctor.appComponents
 
 import android.os.Bundle
 import android.preference.PreferenceManager
@@ -10,7 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.signaldoctor.contracts.DestinationsInfo
 import com.example.signaldoctor.screens.MapScreen
-import com.example.signaldoctor.viewModels.MyViewModel
+import com.example.signaldoctor.appComponents.viewModels.MyViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import org.osmdroid.config.Configuration
 import org.osmdroid.config.Configuration.getInstance

@@ -5,6 +5,7 @@ import androidx.annotation.FloatRange
 import com.example.signaldoctor.contracts.Measure
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.MutableLiveData
 import com.example.signaldoctor.contracts.MeasuringState
 import com.google.android.material.search.SearchBar
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,10 +29,17 @@ class MapScreenUiState @Inject constructor(
         }
     }
 
-    private val _currentMsrMode = MutableStateFlow(Measure.phone)
-    val currentMsrMode = _currentMsrMode.asStateFlow()
+    private val _showMicCalibrationDialog = MutableStateFlow(true)
+    val showMicCalibrationDialog = _showMicCalibrationDialog.asStateFlow()
+
+    fun toggleMicCalibrationDialog() {
+        _showMicCalibrationDialog.value = !showMicCalibrationDialog.value
+    }
+
+    private val _currentMsrType = MutableStateFlow(Measure.phone)
+    val currentMsrType = _currentMsrType.asStateFlow()
     fun setCurrentMsrMode(newMsrMode : Measure){
-        _currentMsrMode.value = newMsrMode
+        _currentMsrType.value = newMsrMode
     }
 
     private val _centerOnScreenLocation = MutableStateFlow(true)
