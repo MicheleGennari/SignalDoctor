@@ -3,4 +3,6 @@
     <string name="measurements_channel_name">Measurements</string>
     <string name="noise_measurement_notification_content_title">Measuring Noise...</string>
     <string name="measurement_channel_description">Notifications about measurements states,\nvalues and results.</string>
+    <string name="phone_measurement_notification_content_title">Measuring phone signal strength...\n</string>
+    <string name="wifi_measurement_notification_content_title">Measuring Wifi signal strength...</string>
 </resources>

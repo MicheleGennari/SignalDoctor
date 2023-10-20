@@ -40,7 +40,7 @@ class NoiseMsrWorker(private val ctx : Context, params : WorkerParameters) : Cor
                 e.printStackTrace()
             }
 
-        return work(ctx)
+        return noiseWork(ctx)
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
@@ -48,10 +48,10 @@ class NoiseMsrWorker(private val ctx : Context, params : WorkerParameters) : Cor
             Measure.sound.ordinal,
             NotificationCompat.Builder(ctx, MEASUREMENT_NOTIFICATION_CHANNEL_ID).apply {
                 setContentTitle(ctx.getString(R.string.noise_measurement_notification_content_title))
-                setSmallIcon(R.drawable.ear)
+                setSmallIcon(R.drawable.ear_icon_bitmap)
                 setProgress(0,0, true)
                 setOngoing(true)
-                if(Build.VERSION.SDK_INT<Build.VERSION_CODES.O) setPriority(NotificationCompat.PRIORITY_HIGH)
+                if(Build.VERSION.SDK_INT<Build.VERSION_CODES.O) priority = NotificationCompat.PRIORITY_HIGH
 
             }.build()
         )
@@ -59,7 +59,7 @@ class NoiseMsrWorker(private val ctx : Context, params : WorkerParameters) : Cor
 }
 
 
-fun work(ctx : Context) : ListenableWorker.Result {
+fun noiseWork(ctx : Context) : ListenableWorker.Result {
 
 
         return if (ActivityCompat.checkSelfPermission(
@@ -105,7 +105,7 @@ fun work(ctx : Context) : ListenableWorker.Result {
                         matcher.group(1)?.toDoubleOrNull()?.let{ msr->
                             consoledebug("noise msr = $msr")
                             ListenableWorker.Result.success(
-                                workDataOf(MsrWorkersKeysContract.MSR_KEY to msr)
+                                workDataOf(MsrWorkersInputData.MSR_KEY to msr)
                             )
                         } ?: ListenableWorker.Result.failure()
                     }

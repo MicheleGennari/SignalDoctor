@@ -8,6 +8,7 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.net.wifi.WifiManager
 import android.os.HardwarePropertiesManager
 import android.provider.MediaStore.Audio
 import android.telephony.TelephonyManager
@@ -123,9 +124,16 @@ class ViewModelProvideModules {
 
     @ViewModelScoped
     @Provides
-    fun providePhoneService(@ApplicationContext ctx : Context) : TelephonyManager {
+    fun provideTelephonyManaher(@ApplicationContext ctx : Context) : TelephonyManager {
 
         return ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+    }
+
+    @ViewModelScoped
+    @Provides
+    fun provideWifiManager(@ApplicationContext ctx: Context) : WifiManager {
+
+        return ctx.getSystemService(Context.WIFI_SERVICE) as WifiManager
     }
 
     @ViewModelScoped

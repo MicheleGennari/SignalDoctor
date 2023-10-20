@@ -20,7 +20,7 @@ import com.example.signaldoctor.onlineDatabase.consoledebug
 import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.uistates.MapScreenUiState
 import com.example.signaldoctor.workers.MsrWorkersInputData
-import com.example.signaldoctor.workers.work
+import com.example.signaldoctor.workers.noiseWork
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.Priority
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -142,7 +142,7 @@ open class MyViewModel @Inject constructor(
 
     fun runNoiseMeasurementDebug(){
         Executors.newSingleThreadExecutor().submit{
-            work(app)
+            noiseWork(app)
         }
     }
 

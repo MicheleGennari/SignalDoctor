@@ -16,7 +16,7 @@ class MsrWorkersInputData(
 
     companion object MsrWorkersInputDataKeys {
         const val MSR_TYPE_KEY = "msrType"
-        //const val MSR_KEY = "msr"
+        const val MSR_KEY = "msr"
         const val Z_KEY = "z"
         const val X_KEY = "x"
         const val Y_KEY = "y"

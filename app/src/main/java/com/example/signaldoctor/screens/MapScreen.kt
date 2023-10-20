@@ -170,7 +170,7 @@ fun MapScreen(
             bottomBar = {
                 MsrsBar(
                   currentMsrMode = currentMsrType,
-                  changeCurrentMsrMode = {newMode ->
+                  changeCurrentMsrMode = { newMode ->
                       viewModel.cancelAllMeasurements()
                       viewModel.mapScreenUiState.setCurrentMsrMode(newMode)
                   }
