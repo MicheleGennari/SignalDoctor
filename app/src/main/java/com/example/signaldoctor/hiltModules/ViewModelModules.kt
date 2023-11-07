@@ -65,12 +65,12 @@ annotation class DefaultTileMap
 @Module
 @InstallIn(ViewModelComponent::class)
 abstract class viewModelBindModules {
-
+/*
     @RealtimeFirebase
     @ViewModelScoped
     @Binds
     abstract fun bindRealtimeDB( db : RealtimeDBImpl) : IMsrsOnlineDB
-
+*/
     @RoomDatabase
     @ViewModelScoped
     @Binds
@@ -85,12 +85,14 @@ abstract class viewModelBindModules {
 @InstallIn(ViewModelComponent::class)
 class ViewModelProvideModules {
 
+    /*
     @ViewModelScoped
     @Provides
     fun provideFirebaseDB(): FirebaseDatabase {
         return Firebase.database(FirebaseContracts.ROOT.toString())
     }
 
+*/
     @MapnikMap
     @ViewModelScoped
     @Provides

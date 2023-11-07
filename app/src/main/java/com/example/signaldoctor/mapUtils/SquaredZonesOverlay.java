@@ -7,26 +7,34 @@ import android.graphics.ColorFilter;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.service.quicksettings.Tile;
 import android.util.Log;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 
+import com.example.signaldoctor.contracts.Measure;
 import com.example.signaldoctor.contracts.MsrsMap;
+import com.example.signaldoctor.repositories.MsrsRepo;
 
 import org.osmdroid.api.IMapView;
 import org.osmdroid.config.Configuration;
 import org.osmdroid.util.MapTileIndex;
 import org.osmdroid.util.RectL;
 import org.osmdroid.util.TileLooper;
+import org.osmdroid.util.TileSystem;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.Projection;
 import org.osmdroid.views.overlay.Overlay;
 
+import java.util.concurrent.atomic.AtomicReference;
+
+import javax.inject.Inject;
+
+
 
 public class SquaredZonesOverlay extends Overlay {
 
-    private Context ctx;
     /**
      * Current tile source
      */
@@ -57,6 +65,10 @@ public class SquaredZonesOverlay extends Overlay {
 
     private MsrsMap msrsMap = new MsrsMap();
 
+    @Inject  MsrsRepo msrsRepo;
+    private Measure msrType;
+
+
     public SquaredZonesOverlay(final Context aContext) {
         this(aContext, true, true);
     }
@@ -68,7 +80,6 @@ public class SquaredZonesOverlay extends Overlay {
 
     public SquaredZonesOverlay(final Context aContext, boolean horizontalWrapEnabled, boolean verticalWrapEnabled) {
         super();
-        this.ctx = aContext;
         setHorizontalWrapEnabled(horizontalWrapEnabled);
         setVerticalWrapEnabled(verticalWrapEnabled);
     }
@@ -80,7 +91,6 @@ public class SquaredZonesOverlay extends Overlay {
 
     @Override
     public void onDetach(final MapView pMapView) {
-        ctx = null;
     }
 
     /**
@@ -152,17 +162,39 @@ public class SquaredZonesOverlay extends Overlay {
 
         @Override
         public void handleTile(final long pMapTileIndex, int pX, int pY) {
+
             if (mCanvas == null) { // in case we just want to have the tiles downloaded, not displayed
                 return;
             }
 
-            mProjection.getPixelFromTile(pX, pY, mTileRect);
+            Long test = MapTileIndex.getTileIndex(TileSystem.primaryKeyMaxZoomLevel
+                    ,TileSystem.getTileFromMercator(mProjection.getMercatorFromTile(pX), TileSystem.getTileSize(TileSystem.primaryKeyMaxZoomLevel))
+                    ,TileSystem.getTileFromMercator(mProjection.getMercatorFromTile(pY), TileSystem.getTileSize(TileSystem.primaryKeyMaxZoomLevel))
+            );
+            Log.i("MapTile:", test+"");
 
-            Double avg = msrsMap.get(MapTileIndex.getZoom(pMapTileIndex)+"_"+MapTileIndex.getX(pMapTileIndex)+"_"+MapTileIndex.getY(pMapTileIndex));
             //function that draws the square zones, the last parameter is the avg value of the measurement for that tile
 
-            if(avg != null){
-                onTileReadyToDraw(mCanvas, mTileRect, avg);
+            AtomicReference<Integer> mapTileAvg = new AtomicReference<>(null);
+            msrsMap.forEach( (key, avg )-> {
+
+
+                if(test< Long.valueOf(key)){
+                    Log.i("dbmapTileIndex: ", ""+Long.valueOf(key) );
+                    if(mapTileAvg.get() == null) {
+
+                        mapTileAvg.set(avg);
+                    }
+                     else {
+
+                        mapTileAvg.set((mapTileAvg.get() + avg) / 2);
+                    }
+                }
+            });
+            if(mapTileAvg.get() != null){
+                Log.i( "computated avg::", mapTileAvg.get()+"");
+
+                onTileReadyToDraw(mCanvas, mTileRect, mapTileAvg.get());
             }
             //onTileReadyToDraw(mCanvas, mTileRect, msrsMap.get("7_10_12"));
 
@@ -209,18 +241,22 @@ public class SquaredZonesOverlay extends Overlay {
         return gridPaint;
     }
 
-    protected void onTileReadyToDraw(final Canvas c, final Rect tileRect, @NonNull final Double avg) {
+    protected void onTileReadyToDraw(final Canvas c, final Rect tileRect, @NonNull final Integer avg) {
         final Rect canvasRect = getCanvasRect();
         Paint paint = new Paint();
-        if(avg.equals(32)){
-            paint.setColor(Color.RED);
-        }else if(avg.equals(84)){
-            paint.setColor(Color.BLUE);
-        }else paint.setColor(Color.GREEN);
+        Log.i("average on onTileReadyToDraw:", ""+avg);
+        if(avg>-32){
+            paint.setColor(Color.GREEN);
+        }else if(avg > -60){
+            paint.setColor(Color.YELLOW);
+        }else paint.setColor(Color.RED);
+
+        Log.i("s",""+c.getWidth());
 
         paint.setAlpha(100);
         if (canvasRect == null) {
             //This line of code below creates the square zone
+            Log.i("s", "canvasRect is null, dafak");
             c.drawRect(tileRect.left, tileRect.top, tileRect.right, tileRect.bottom, paint);
             return;
         }
@@ -238,7 +274,7 @@ public class SquaredZonesOverlay extends Overlay {
         //currentMapTile.draw(c);
         //This line of code below creates the square zone
         c.drawRect(tileRect.left, tileRect.top, tileRect.right, tileRect.bottom, paint);
-
+        Log.i("s","should have drawn at this point");
         c.restore();
     }
 

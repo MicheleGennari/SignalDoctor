@@ -1,36 +1,12 @@
 package com.example.signaldoctor.appComponents
 
-import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
-import android.content.Context
-import android.content.Intent
-import android.content.IntentSender
-import android.content.pm.PackageManager
 import android.location.Location
-import com.google.android.gms.location.*
 import android.os.Looper
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.ActivityResultRegistry
-import androidx.core.app.ActivityCompat
-import com.example.signaldoctor.onlineDatabase.consoledebug
-import com.google.android.gms.common.api.ResolvableApiException
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.LocationSettingsRequest
-import com.google.android.gms.location.Priority
+import com.google.android.gms.location.*
 import com.google.android.gms.tasks.CancellationTokenSource
-import dagger.hilt.android.qualifiers.ActivityContext
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.channels.trySendBlocking
-import kotlinx.coroutines.disposeOnCancellation
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.internal.resumeCancellableWith
 import kotlinx.coroutines.suspendCancellableCoroutine
 import javax.inject.Inject
 import kotlin.coroutines.resume
@@ -55,14 +31,20 @@ class FlowLocationProvider @Inject constructor(
                 super.onLocationAvailability(p0)
                 if(!p0.isLocationAvailable) trySend(null)
             }
-        }
-        provider.requestLocationUpdates(
-            lr,
-            callback,
-            Looper.myLooper()
-        )
 
-        awaitClose{ provider.removeLocationUpdates(callback) }
+        }
+
+        try{
+            provider.requestLocationUpdates(
+                lr,
+                callback,
+                Looper.myLooper()
+            )
+            awaitCancellation()
+        }finally {
+            provider.removeLocationUpdates(callback)
+        }
+
     }
 
     /*

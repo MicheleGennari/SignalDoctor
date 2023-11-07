@@ -6,3 +6,4 @@ enum class Measure{
     phone,
     wifi
 }
+

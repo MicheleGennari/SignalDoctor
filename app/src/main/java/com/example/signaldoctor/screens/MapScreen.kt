@@ -23,10 +23,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
@@ -34,23 +31,24 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.signaldoctor.R
+import com.example.signaldoctor.appComponents.viewModels.MyViewModel
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
 import com.example.signaldoctor.contracts.MsrsMap
 import com.example.signaldoctor.mapUtils.GpsMarker
 import com.example.signaldoctor.mapUtils.SquaredZonesOverlay
-import com.example.signaldoctor.onlineDatabase.consoledebug
+import com.example.signaldoctor.mapUtils.SquaredZonesOverlay2
 import com.example.signaldoctor.ui.theme.SignalDoctorTheme
-import com.example.signaldoctor.appComponents.viewModels.MyViewModel
+import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
-import kotlinx.coroutines.launch
+import org.osmdroid.tileprovider.MapTileProviderBasic
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 
@@ -63,10 +61,13 @@ fun MapScreen(
     SignalDoctorTheme {
 
 
-        val locationPermission = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION){
-            isGranted -> when(isGranted) {
-                true -> consoledebug("Permission GRANTED")
-            false -> consoledebug("Permission DENIED")
+        val locationPermission = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION){ isGranted ->
+            when(isGranted) {
+                true -> {
+                    consoledebug("Permission GRANTED")
+                    viewModel.locationUpdatesOn()
+                }
+                false -> consoledebug("Permission DENIED")
             }
         }
         val recordPermission = rememberPermissionState(permission = android.Manifest.permission.RECORD_AUDIO){
@@ -80,6 +81,10 @@ fun MapScreen(
 
         val searchBarText by viewModel.mapScreenUiState.searchBarText.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
         val centerOnScreenLocation by viewModel.mapScreenUiState.centerOnScreenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+
+        val lastNoiseMsr by viewModel.lastNoiseMsr.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val lastPhoneMsr by viewModel.lastPhoneMsr.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val lastWifiMsr by viewModel.lastWifiMsr.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
 
         val soundAvgs by viewModel.soundAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
         val phoneAvgs by viewModel.phoneAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
@@ -131,6 +136,7 @@ fun MapScreen(
                         modifier= Modifier.size(40.dp),
                         enabled =  userLocation!=null,
                         onClick = {
+                            consoledebug("wtf")
                             if (!locationPermission.status.isGranted)
                                 locationPermission.launchPermissionRequest()
                             else
@@ -153,12 +159,11 @@ fun MapScreen(
                                     else {
                                         //viewModel.runNoiseMeasurementDebug()
                                         viewModel.runMeasurement(currentMsrType)
-                                        viewModel.changeMeasuringState(MeasuringState.RUNNING)
                                     }
                                 }
                                 MeasuringState.RUNNING -> {
                                     viewModel.cancelMeasurement(currentMsrType)
-                                    viewModel.changeMeasuringState(MeasuringState.STOP)
+                                    //viewModel.changeMeasuringState(MeasuringState.STOP)
                                 }
                                 MeasuringState.BACKGROUND -> viewModel.changeMeasuringState(MeasuringState.STOP)
                             }
@@ -169,11 +174,14 @@ fun MapScreen(
 
             bottomBar = {
                 MsrsBar(
-                  currentMsrMode = currentMsrType,
+                  currentMsrType = currentMsrType,
                   changeCurrentMsrMode = { newMode ->
                       viewModel.cancelAllMeasurements()
                       viewModel.mapScreenUiState.setCurrentMsrMode(newMode)
-                  }
+                  },
+                    phoneMsr = lastPhoneMsr,
+                    noiseMsr = lastNoiseMsr,
+                    wifiMsr = lastWifiMsr
                 )
             }
         )
@@ -198,7 +206,6 @@ fun Map(
     disableCenterOnUserLocation : () -> Unit = {},
     updateSearchBarText : (String) -> Unit = {},
 ) {
-    val composableScope = rememberCoroutineScope()
 
     AndroidView(
         modifier = modifier,
@@ -218,7 +225,7 @@ fun Map(
                             )
                         })
                     }
-                    for (mode in Measure.values()) add(mode.ordinal, SquaredZonesOverlay(it))
+                    for (mode in Measure.values()) add(mode.ordinal, SquaredZonesOverlay2(MapTileProviderBasic(it, TileSourceFactory.MAPNIK), it, phoneAvgs))
                 }
                 controller.run {
                     setZoom(12.5)
@@ -227,9 +234,7 @@ fun Map(
             }
         },
 
-        ) {map->
-
-            map.run {
+        ) {map-> map.run {
                 overlays.run {
 
                     if (locationPermission.status.isGranted && userLocation != null) {
@@ -249,12 +254,12 @@ fun Map(
                             if (overlay is GpsMarker) removeAt(index)
                         }
                     }
-                    filterIsInstance<SquaredZonesOverlay>().forEachIndexed { index, overlay ->
+                    filterIsInstance<SquaredZonesOverlay2>().forEachIndexed { index, overlay ->
                         //set the HashMap used to draw signal level squares
                         when (index) {
-                            Measure.phone.ordinal -> overlay.setMsrsMap(phoneAvgs)
-                            Measure.sound.ordinal -> overlay.setMsrsMap(soundAvgs)
-                            Measure.wifi.ordinal -> overlay.setMsrsMap(wifiAvgs)
+                            Measure.phone.ordinal -> overlay.setAvgsMap(phoneAvgs)
+                            Measure.sound.ordinal -> overlay.setAvgsMap(soundAvgs)
+                            Measure.wifi.ordinal -> overlay.setAvgsMap(wifiAvgs)
                         }
 
                         //Take all measures overlays and disable them if they're not of the current selected measure type
@@ -366,7 +371,7 @@ fun UserLocationButton(
     ){
     FloatingActionButton(
         modifier = Modifier,
-        onClick = if(enabled) onClick else {->},
+        onClick = onClick,
         shape = CircleShape,
         containerColor = if(enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.background,
         contentColor = if(enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
@@ -459,20 +464,25 @@ fun MeasuringButton(
 @Preview("msrsTab")
 fun MsrsBar(
     modifier: Modifier = Modifier,
-    currentMsrMode : Measure = Measure.phone,
-    soundAvg : Int = 0,
-    phoneAvg : Int = 0,
-    wifiAvg : Int = 0,
+    currentMsrType : Measure = Measure.phone,
+    noiseMsr : Int? = 0,
+    phoneMsr : Int? = 0,
+    wifiMsr : Int? = 0,
     changeCurrentMsrMode : (Measure) -> Unit = {},
 ){
     TabRow(
-        selectedTabIndex = currentMsrMode.ordinal
+        selectedTabIndex = currentMsrType.ordinal
     ) {
-        for(mode in Measure.values()) {
+        for(TabMsrType in Measure.values()) {
             MsrTab(
-                selected = if (mode == currentMsrMode) true else false,
-                msrName = mode.name,
-                onClick = { changeCurrentMsrMode(mode) }
+                selected = if (TabMsrType == currentMsrType) true else false,
+                msrName = TabMsrType.name,
+                msr = when(TabMsrType) {
+                                       Measure.sound -> noiseMsr
+                                        Measure.phone -> phoneMsr
+                                        Measure.wifi -> wifiMsr
+                                       },
+                onClick = { changeCurrentMsrMode(TabMsrType) }
             )
         }
     }
@@ -483,7 +493,7 @@ fun MsrsBar(
 fun MsrTab(
     selected : Boolean = true,
     msrName : String = "Phone",
-    avg : Int = 0,
+    msr : Int? = 0,
     onClick : () -> Unit = {}
 ){
     Tab(
@@ -492,7 +502,7 @@ fun MsrTab(
         text = {
                     Column {
                         Text(text = msrName)
-                        //Text(text = avg.toString())
+                        Text(text = msr?.let { "${msr}dBm" } ?: "--")
                     }
                },
 
@@ -505,7 +515,7 @@ fun MsrTab(
                                             Measure.wifi.name -> painterResource(id = R.drawable.wifi)
                                             else -> painterResource(id = R.drawable.ic_launcher_foreground)}
                                             ,
-                    contentDescription = "${msrName} Tab"
+                    contentDescription = "$msrName Tab"
                     )
                },
 

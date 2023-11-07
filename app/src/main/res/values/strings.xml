@@ -1,8 +1,11 @@
 <resources>
     <string name="app_name"> SignalDoctor </string>
+
     <string name="measurements_channel_name">Measurements</string>
-    <string name="noise_measurement_notification_content_title">Measuring Noise...</string>
     <string name="measurement_channel_description">Notifications about measurements states,\nvalues and results.</string>
+
+    <string name="noise_measurement_notification_content_title">Measuring Noise...</string>
     <string name="phone_measurement_notification_content_title">Measuring phone signal strength...\n</string>
     <string name="wifi_measurement_notification_content_title">Measuring Wifi signal strength...</string>
+    <string name="post_measurement_content_title">Uploading Measurement...</string>
 </resources>

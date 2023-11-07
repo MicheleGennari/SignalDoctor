@@ -1,48 +1,108 @@
 package com.example.signaldoctor.onlineDatabase
 
-import android.util.Log
+import androidx.compose.animation.core.snap
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MsrsMap
 import com.example.signaldoctor.repositories.IMsrsOnlineDB
-import com.google.firebase.database.DatabaseReference
+import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.workers.MsrWorkersInputData
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 import com.google.firebase.database.ktx.snapshots
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.tasks.await
+import org.osmdroid.util.MapTileIndex
+import org.osmdroid.util.TileSystemWebMercator
+import org.osmdroid.views.MapView
+import org.osmdroid.views.Projection
+import java.util.concurrent.CancellationException
 import javax.inject.Inject
+import kotlin.coroutines.resume
 
-class RealtimeDBImpl @Inject constructor(val db : FirebaseDatabase) : IMsrsOnlineDB {
+const val postMsrRealtimeDbRoot = "measurements"
 
+class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IMsrsOnlineDB {
+    override fun getMsrsAvgs(msrType: Measure): Flow<MsrsMap> = callbackFlow {
 
+        val path = db.reference.child("measurements/$msrType")
+        lateinit var listener: ValueEventListener
 
-
-    override fun getMsrsAvgs(msrType: Measure): Flow<MsrsMap> {
-
-        /*return flow{
-                val hashMap = MsrsMap()
-                db.reference.child("averages/${msrType}").snapshots.take(1).collect { dataSnapshot ->
-
-                    dataSnapshot.children.forEach {entry ->
-                        consoledebug("${msrType}: KEY:"+entry.key +", VALUE:"+ entry.value)
-                        entry.key?.let {
-                            hashMap[it] = entry.value as Long }
-                    }
+        try{
+            listener = path.addValueEventListener(object : ValueEventListener{
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    consoledebug("uploading...")
+                    val msrsMap = MsrsMap()
+                    msrsMap.putAll(snapshot.children.associateBy(
+                        { mapTile -> mapTile.key!!},
+                        { mapTile -> mapTile.children.sumOf { measurement ->
+                            consoledebug("${ measurement.value}")
+                            (measurement.value as Long).toInt()
+                        } / mapTile.childrenCount.toInt()
+                        }
+                    ) )
+                    trySendBlocking(msrsMap)
                 }
-                emit(hashMap)
-            }*/
-        return db.reference.child("averages/${msrType}").snapshots.map{ dataSnapshot ->
-            val hashMap = MsrsMap()
-            dataSnapshot.children.forEach {entry ->
-                consoledebug("${msrType}: KEY:"+entry.key +", VALUE:"+ entry.value)
-                entry.key?.let {tileindex->
-                    hashMap[tileindex] =  (entry.value as Long).toDouble()
+
+                override fun onCancelled(error: DatabaseError) {
+                    cancel(CancellationException("Realtime DB can't send average measurements"))
                 }
-            }
-            hashMap
+
+            })
+            awaitCancellation()
+        }finally {
+            path.removeEventListener(listener)
         }
 
     }
 
+    fun computeAvg(z : Int, avgsMap : MsrsMap, measurements: DataSnapshot){
+
+        if (z<0) return
+        else {
+            // path to single measurement is "measurement/z/mapTile{id}/measurement{id]/value"
+
+            measurements.child("$z").children.forEach{ mapTile ->
+
+            if(avgsMap[mapTile.key!!] == null) {
+                avgsMap[mapTile.key!!] = mapTile.children.sumOf { measurement ->
+                    (measurement.child("value").value as Long).toInt()
+                } / mapTile.childrenCount.toInt()
+            }else {
+                avgsMap[mapTile.key!!] = (avgsMap[mapTile.key!!]!! +( mapTile.children.sumOf { measurement ->
+                    (measurement.child("value").value as Long).toInt()
+                } / mapTile.childrenCount.toInt()) ) / 2
+            }
+            }
+        }
+    }
+
+    override suspend fun postMsr(
+        msr : Int,
+        mapTileData: MsrWorkersInputData
+    ): Boolean = suspendCancellableCoroutine { continuation ->
+
+        val mapTileIndex = MapTileIndex.getTileIndex(MapTileIndex.mMaxZoomLevel, MapView.getTileSystem().getTileXFromLongitude(mapTileData.long, MapTileIndex.mMaxZoomLevel), MapView.getTileSystem().getTileYFromLatitude(mapTileData.lat, MapTileIndex.mMaxZoomLevel) )
+
+        db.reference.child("measurements/${mapTileData.msrType}/$mapTileIndex").push()
+            .setValue(msr) {error, _ ->
+
+                // if error doesn't exist, return true, otherwise something bad happened, so false is returned
+                if(error == null)
+                    continuation.resume(true)
+                else
+                    continuation.resume(false)
+            }
+
+    }
+    /*
     override fun postMsr(msrType: String, msr : Double, z : Int, x : Int, y : Int, zMax : Int, zMin : Int): Boolean {
 
         ///this reference is the place where to store the measurement: e.g. measurements/phone/maptileid/
@@ -71,11 +131,8 @@ class RealtimeDBImpl @Inject constructor(val db : FirebaseDatabase) : IMsrsOnlin
     }
 
 }
-
- fun consoledebug(msg : String){
-   Log.i("DEBUG:", msg)
-}
-
+*/
+    /*
 fun descendingPost(msrType: String, msr : Double, z : Int, x : Int, y : Int, zMax: Int, dbRef : DatabaseReference) : Boolean {
 
 
@@ -146,4 +203,6 @@ fun climbingPost(msrType: String, msr : Double, z : Int, x : Int, y : Int, zMin:
             y = (x+1)/2,
         )
     }
+*/
+
 }

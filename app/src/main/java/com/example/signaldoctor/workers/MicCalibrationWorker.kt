@@ -8,7 +8,6 @@ import androidx.annotation.RequiresApi
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.example.signaldoctor.onlineDatabase.consoledebug
 import java.io.IOException
 import javax.inject.Inject
 

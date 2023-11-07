@@ -18,7 +18,7 @@ import com.arthenica.ffmpegkit.ReturnCode
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
-import com.example.signaldoctor.onlineDatabase.consoledebug
+import com.example.signaldoctor.utils.Loggers.consoledebug
 import java.io.IOException
 import java.util.regex.Pattern
 import kotlin.IllegalStateException
@@ -48,7 +48,7 @@ class NoiseMsrWorker(private val ctx : Context, params : WorkerParameters) : Cor
             Measure.sound.ordinal,
             NotificationCompat.Builder(ctx, MEASUREMENT_NOTIFICATION_CHANNEL_ID).apply {
                 setContentTitle(ctx.getString(R.string.noise_measurement_notification_content_title))
-                setSmallIcon(R.drawable.ear_icon_bitmap)
+                setSmallIcon(R.drawable.ear_icon_notification_bitmap)
                 setProgress(0,0, true)
                 setOngoing(true)
                 if(Build.VERSION.SDK_INT<Build.VERSION_CODES.O) priority = NotificationCompat.PRIORITY_HIGH
@@ -102,7 +102,7 @@ fun noiseWork(ctx : Context) : ListenableWorker.Result {
                     val msrLog = ffmpegSession.allLogs[ffmpegSession.allLogs.size-2].message
                     val matcher = Pattern.compile("I:\\s+(-?\\d+(.\\d+)?)").matcher(msrLog)
                     return if(matcher.find()) {
-                        matcher.group(1)?.toDoubleOrNull()?.let{ msr->
+                        matcher.group(1)?.toDoubleOrNull()?.toInt().let{ msr->
                             consoledebug("noise msr = $msr")
                             ListenableWorker.Result.success(
                                 workDataOf(MsrWorkersInputData.MSR_KEY to msr)
