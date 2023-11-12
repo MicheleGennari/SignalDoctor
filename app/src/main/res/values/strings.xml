@@ -8,4 +8,5 @@
     <string name="phone_measurement_notification_content_title">Measuring phone signal strength...\n</string>
     <string name="wifi_measurement_notification_content_title">Measuring Wifi signal strength...</string>
     <string name="post_measurement_content_title">Uploading Measurement...</string>
+    <string name="tile_index_column">tile_index</string>
 </resources>

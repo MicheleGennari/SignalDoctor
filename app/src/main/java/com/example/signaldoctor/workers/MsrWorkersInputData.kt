@@ -8,7 +8,8 @@ import com.example.signaldoctor.contracts.Measure
 class MsrWorkersInputData(
      val msrType : String,
      val lat : Double,
-     val long : Double
+     val long : Double,
+     val isLTE : Boolean = false
 ) {
 
     companion object MsrWorkersInputDataKeys {

@@ -1,13 +1,19 @@
 package com.example.signaldoctor.screens
 
 import android.location.Location
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -23,30 +29,44 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.signaldoctor.R
+import com.example.signaldoctor.appComponents.CHANGE_LOCATION_SETTINGS
+import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.appComponents.viewModels.MyViewModel
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
 import com.example.signaldoctor.contracts.MsrsMap
 import com.example.signaldoctor.mapUtils.GpsMarker
-import com.example.signaldoctor.mapUtils.SquaredZonesOverlay
 import com.example.signaldoctor.mapUtils.SquaredZonesOverlay2
+import com.example.signaldoctor.mapUtils.rememberMap
 import com.example.signaldoctor.ui.theme.SignalDoctorTheme
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.google.android.gms.common.api.ResolvableApiException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.osmdroid.tileprovider.MapTileProviderBasic
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -70,6 +90,9 @@ fun MapScreen(
                 false -> consoledebug("Permission DENIED")
             }
         }
+
+        val currentMsrType by viewModel.mapScreenUiState.currentMsrType.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+
         val recordPermission = rememberPermissionState(permission = android.Manifest.permission.RECORD_AUDIO){
                 isGranted -> when(isGranted) {
             true -> consoledebug("Permission GRANTED")
@@ -82,6 +105,9 @@ fun MapScreen(
         val searchBarText by viewModel.mapScreenUiState.searchBarText.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
         val centerOnScreenLocation by viewModel.mapScreenUiState.centerOnScreenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
 
+        val measurementProgress by  animateFloatAsState(targetValue = viewModel.measurementProgress.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED).value,
+            label = "Measurement Progress Bar"
+        )
         val lastNoiseMsr by viewModel.lastNoiseMsr.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
         val lastPhoneMsr by viewModel.lastPhoneMsr.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
         val lastWifiMsr by viewModel.lastWifiMsr.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
@@ -90,11 +116,11 @@ fun MapScreen(
         val phoneAvgs by viewModel.phoneAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
         val wifiAvgs by viewModel.wifiAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
 
-        val currentMsrType by viewModel.mapScreenUiState.currentMsrType.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
         val currentMeasuringState by viewModel.mapScreenUiState.measuringState.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
 
         Scaffold(
             topBar = {
+
                 SearchBar(
                     modifier = Modifier,
                     alignment= Alignment.Center,
@@ -108,8 +134,7 @@ fun MapScreen(
 
             content = { paddingValues ->
                 Map(
-                    modifier = Modifier.padding(paddingValues),
-                    map = viewModel.map,
+                    modifier = Modifier.padding(bottom = paddingValues.calculateBottomPadding() -  paddingValues.calculateBottomPadding()),
                     soundAvgs = soundAvgs,
                     phoneAvgs = phoneAvgs,
                     wifiAvgs = wifiAvgs,
@@ -125,64 +150,86 @@ fun MapScreen(
             },
 
             floatingActionButton = {
-                Row(
-                    modifier= Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 30.dp),
-                    verticalAlignment = Alignment.Bottom,
-                ){
 
-                    UserLocationButton(
-                        modifier= Modifier.size(40.dp),
-                        enabled =  userLocation!=null,
-                        onClick = {
-                            consoledebug("wtf")
-                            if (!locationPermission.status.isGranted)
-                                locationPermission.launchPermissionRequest()
-                            else
-                                if(userLocation!=null)
-                                viewModel.setUserLocationAsScreenLocation()
-                        }
-                    )
-
-                    MeasuringButton(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .offset(75.dp),
-                        measuringState = currentMeasuringState,
-                        onClick = {
-                            when(currentMeasuringState){
-                                MeasuringState.STOP -> {
-
-                                    if(currentMsrType == Measure.sound && !recordPermission.status.isGranted)
-                                        recordPermission.launchPermissionRequest()
-                                    else {
-                                        //viewModel.runNoiseMeasurementDebug()
-                                        viewModel.runMeasurement(currentMsrType)
-                                    }
-                                }
-                                MeasuringState.RUNNING -> {
-                                    viewModel.cancelMeasurement(currentMsrType)
-                                    //viewModel.changeMeasuringState(MeasuringState.STOP)
-                                }
-                                MeasuringState.BACKGROUND -> viewModel.changeMeasuringState(MeasuringState.STOP)
-                            }
-                        }
-                    )
-                }
             },
 
             bottomBar = {
-                MsrsBar(
-                  currentMsrType = currentMsrType,
-                  changeCurrentMsrMode = { newMode ->
-                      viewModel.cancelAllMeasurements()
-                      viewModel.mapScreenUiState.setCurrentMsrMode(newMode)
-                  },
-                    phoneMsr = lastPhoneMsr,
-                    noiseMsr = lastNoiseMsr,
-                    wifiMsr = lastWifiMsr
-                )
+
+                Column(
+                    modifier = modifier.zIndex(2f),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ){
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth(),
+                        // .padding(horizontal = 30.dp),
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+
+                        val cs = rememberCoroutineScope()
+                        val mainActivity = LocalContext.current as MainActivity
+
+                        UserLocationButton(
+                            modifier = Modifier.size(60.dp),
+                            enabled = userLocation != null,
+                            onClick = {
+
+                                if (!locationPermission.status.isGranted)
+                                    locationPermission.launchPermissionRequest()
+                                else if (userLocation == null) {
+                                        try {
+                                            viewModel.checkLocationSettings(mainActivity)
+                                        } catch (resolvable: ResolvableApiException) {
+
+                                            resolvable.startResolutionForResult(
+                                                mainActivity,
+                                                CHANGE_LOCATION_SETTINGS
+                                            )
+                                        }
+                                }else viewModel.setUserLocationAsScreenLocation()
+                            }
+                        )
+
+                        MeasuringButton(
+                            modifier = Modifier,
+                            measuringState = currentMeasuringState,
+                            measurementProgress = measurementProgress,
+                            onClick = {
+                                when (currentMeasuringState) {
+                                    MeasuringState.STOP -> {
+
+                                        if (currentMsrType == Measure.sound && !recordPermission.status.isGranted)
+                                            recordPermission.launchPermissionRequest()
+                                        else
+                                            viewModel.runMeasurement(currentMsrType)
+
+                                    }
+
+                                    MeasuringState.RUNNING -> {
+                                        viewModel.cancelMeasurement(currentMsrType)
+                                        //viewModel.changeMeasuringState(MeasuringState.STOP)
+                                    }
+
+                                    MeasuringState.BACKGROUND -> viewModel.changeMeasuringState(
+                                        MeasuringState.STOP
+                                    )
+                                }
+                            }
+                        )
+                    }
+
+                    MsrsBar(
+                        currentMsrType = currentMsrType,
+                        changeCurrentMsrMode = { newMode ->
+                            viewModel.cancelAllMeasurements()
+                            viewModel.mapScreenUiState.setCurrentMsrMode(newMode)
+                        },
+                        phoneMsr = lastPhoneMsr,
+                        noiseMsr = lastNoiseMsr,
+                        wifiMsr = lastWifiMsr
+                    )
+                }
             }
         )
     }
@@ -194,23 +241,29 @@ fun MapScreen(
 @Composable
 fun Map(
     modifier: Modifier,
-    map : MapView,
+    map : MapView = rememberMap(),
     currentMsrMode: Measure = Measure.phone,
     phoneAvgs : MsrsMap,
     soundAvgs : MsrsMap,
     wifiAvgs : MsrsMap,
     locationPermission : PermissionState,
     userLocation : Location?,
-    screenLocation : Location,
+    screenLocation : Location?,
     centerOnUserLocation : Boolean = false,
     disableCenterOnUserLocation : () -> Unit = {},
     updateSearchBarText : (String) -> Unit = {},
 ) {
 
+
     AndroidView(
+
         modifier = modifier,
-        factory = {
+        factory = {ctx ->
             map.apply {
+                map.setScrollableAreaLimitLatitude(MapView.getTileSystem().maxLatitude, MapView.getTileSystem().minLatitude, 0)
+                map.setScrollableAreaLimitLongitude(MapView.getTileSystem().minLongitude, MapView.getTileSystem().maxLongitude, 0)
+
+                minZoomLevel = 3.0
                 setMultiTouchControls(true)
                 overlays.run {
                     /////////////////////////////////////
@@ -225,20 +278,29 @@ fun Map(
                             )
                         })
                     }
-                    for (mode in Measure.values()) add(mode.ordinal, SquaredZonesOverlay2(MapTileProviderBasic(it, TileSourceFactory.MAPNIK), it, phoneAvgs))
+                    for (mode in Measure.values()) add(mode.ordinal, SquaredZonesOverlay2(MapTileProviderBasic(ctx, TileSourceFactory.MAPNIK), ctx,
+                        when(mode){
+                            Measure.sound -> soundAvgs
+                            Measure.phone -> phoneAvgs
+                            Measure.wifi -> wifiAvgs
+                        },
+                        mode
+                        ))
                 }
                 controller.run {
-                    setZoom(12.5)
-                    setCenter(GeoPoint(screenLocation.latitude, screenLocation.longitude))
+                    screenLocation?.let{ screenLocation ->
+                        setZoom(12.5)
+                        setCenter(GeoPoint(screenLocation.latitude, screenLocation.longitude))
+                    }
                 }
             }
         },
 
-        ) {map-> map.run {
+        ) { map-> map.run {
                 overlays.run {
 
                     if (locationPermission.status.isGranted && userLocation != null) {
-                        consoledebug("add Marker")
+                        //consoledebug("add Marker")
                         forEachIndexed { index, overlay ->
                             if (overlay is GpsMarker) removeAt(index)
                         }
@@ -272,20 +334,32 @@ fun Map(
                         if (zoomLevelDouble < 15.5)
                             zoomTo(16.8)
 
-                        screenLocation.run{
+                        screenLocation?.run{
                             animateTo(
                                 GeoPoint(latitude, longitude),
                                 16.6,
                                 500
                             )
-                            updateSearchBarText("${latitude}, ${longitude}")
+                            updateSearchBarText("$latitude, $longitude")
                         }
                         disableCenterOnUserLocation()
                     }
                 }
                 invalidate()
             }
-        consoledebug("CRASH TEST")
+        //consoledebug("CRASH TEST")
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) {
+                map.onResume()
+            } else if (event == Lifecycle.Event.ON_STOP) {
+                map.onPause()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 }
 
@@ -337,6 +411,9 @@ fun SearchBar(
         DockedSearchBar(
             modifier = modifier,
             query = text,
+            placeholder = {
+                          Text(text = "Cerca qui", fontWeight = FontWeight.Light)
+            },
             onQueryChange = onQueryChange,
             onSearch = onSearch,
             active = false,
@@ -346,6 +423,7 @@ fun SearchBar(
                     modifier = Modifier
                         .padding(15.dp)
                         .clickable {
+                            onSearch(text)
                         },
                     painter = painterResource(id = R.drawable.search_icon2),
                     contentDescription = "Search button"
@@ -370,14 +448,14 @@ fun UserLocationButton(
     enabled : Boolean = false
     ){
     FloatingActionButton(
-        modifier = Modifier,
+        modifier = modifier,
         onClick = onClick,
-        shape = CircleShape,
+        shape = shape,
         containerColor = if(enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.background,
         contentColor = if(enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
     ) {
         Icon(
-            modifier = modifier,
+            modifier = modifier.padding(10.dp),
             painter = painterResource(id = R.drawable.location_button),
             contentDescription = "get location button",
         )
@@ -389,66 +467,66 @@ fun UserLocationButton(
 fun MeasuringButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
-    measuringState: MeasuringState = MeasuringState.STOP
+    fabInteractions : MutableInteractionSource = remember{MutableInteractionSource()} ,
+    measuringState: MeasuringState = MeasuringState.STOP,
+    measurementProgress : Float = 5/10f
 ){
-    ExtendedFloatingActionButton(
-        modifier = modifier,
-        text = {},
-        containerColor = MaterialTheme.colorScheme.onPrimary,
-        icon = {
-               /*Crossfade(
-                   targetState = measuringState,
-                   label = "Measuring Button"
-                   ) {measuringState ->
-                   when (measuringState) {
-                       MeasuringState.STOP -> {
-                           Icon(
-                               modifier = Modifier
-                                   .padding(top = 20.dp, bottom = 20.dp, start = 6.dp, end = 6.dp)
-                                   .offset(10.dp),
-                               painter = painterResource(
-                                   id = R.drawable.play_icon
-                               ), contentDescription = "Measuring Button"
-                           )
-                       }
-                       MeasuringState.BACKGROUND -> CircularProgressIndicator()
-                       MeasuringState.RUNNING -> {
-                           Icon(
-                               modifier = Modifier
-                                   .padding(4.dp)
-                                   .offset(x = 1.dp),
-                               painter = painterResource(
-                                   id = R.drawable.stop_icon
-                               ), contentDescription = "Measuring Button"
-                           )
-                       }
-                   }
-               }*/
-               when (measuringState) {
-            MeasuringState.STOP -> {
-                Icon(
-                    modifier = Modifier
-                        .padding(top = 20.dp, bottom = 20.dp, start = 6.dp, end = 6.dp)
-                        .offset(10.dp),
-                    painter = painterResource(
-                        id = R.drawable.play_icon
-                    ), contentDescription = "Measuring Button"
-                )
-            }
-                MeasuringState.BACKGROUND -> CircularProgressIndicator()
-                MeasuringState.RUNNING -> {
-                    Icon(
-                        modifier = Modifier
-                            .offset(2.dp)
-                            .padding(4.dp),
-                        painter = painterResource(
-                            id = R.drawable.stop_icon
-                        ), contentDescription = "Measuring Button"
-                    )
-                }
-        }
 
-               },
+    val isPressed by fabInteractions.collectIsPressedAsState()
+    val pressedAnimation by animateFloatAsState(targetValue = if(isPressed) 0.9f else 1f,
+        animationSpec = spring(Spring.DampingRatioLowBouncy),
+        label = "pressedMeasuringButton Animation"
+    )
+
+    ExtendedFloatingActionButton(
+        modifier = Modifier
+            .size(100.dp)
+            .graphicsLayer {
+                this.scaleX = pressedAnimation
+                this.scaleY = pressedAnimation
+            },
+        interactionSource = fabInteractions,
+        text = {},
+        expanded = false,
+        containerColor = MaterialTheme.colorScheme.onPrimary,
+        icon = { when (measuringState) {
+                    MeasuringState.STOP -> {
+                        Icon(
+                            modifier = Modifier.padding(20.dp),
+                                //.padding(top = 20.dp, bottom = 20.dp, start = 6.dp, end = 6.dp)
+                                //.offset(10.dp),
+                            painter = painterResource(
+                                id = R.drawable.play_icon
+                            ), contentDescription = "Measuring Button"
+                        )
+                    }
+                    MeasuringState.BACKGROUND -> CircularProgressIndicator()
+                    MeasuringState.RUNNING -> {
+                        Box(
+                           contentAlignment = Alignment.Center
+                        ) {
+                            
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(10.dp),
+                                progress = measurementProgress
+                            )
+                        }
+                        /*
+                        Icon(
+                            modifier = Modifier
+                                .offset(2.dp)
+                                .padding(4.dp),
+                            painter = painterResource(
+                                id = R.drawable.stop_icon
+                            ), contentDescription = "Measuring Button"
+                        )
+                        */
+                    }
+                }
+
+           },
         onClick = onClick,
         shape = CircleShape
     )
@@ -471,18 +549,18 @@ fun MsrsBar(
     changeCurrentMsrMode : (Measure) -> Unit = {},
 ){
     TabRow(
-        selectedTabIndex = currentMsrType.ordinal
+        selectedTabIndex = currentMsrType.ordinal,
     ) {
-        for(TabMsrType in Measure.values()) {
+        for(tabMsrType in Measure.values()) {
             MsrTab(
-                selected = if (TabMsrType == currentMsrType) true else false,
-                msrName = TabMsrType.name,
-                msr = when(TabMsrType) {
+                selected = if (tabMsrType == currentMsrType) true else false,
+                msrName = tabMsrType.name,
+                msr = when(tabMsrType) {
                                        Measure.sound -> noiseMsr
                                         Measure.phone -> phoneMsr
                                         Measure.wifi -> wifiMsr
                                        },
-                onClick = { changeCurrentMsrMode(TabMsrType) }
+                onClick = { changeCurrentMsrMode(tabMsrType) }
             )
         }
     }

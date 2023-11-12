@@ -3,45 +3,47 @@ package com.example.signaldoctor.appComponents.viewModels
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
-import android.util.Log
 import androidx.annotation.FloatRange
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.datastore.core.DataStore
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkInfo
+import androidx.work.hasKeyWithValueOfType
 import com.example.signaldoctor.R
+import com.example.signaldoctor.Settings
 import com.example.signaldoctor.appComponents.FlowConnectivityManager
 import com.example.signaldoctor.appComponents.FlowLocationProvider
+import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.appComponents.MsrsWorkManager
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
 import com.example.signaldoctor.contracts.MsrsMap
 import com.example.signaldoctor.contracts.NetworkMode
-import com.example.signaldoctor.hiltModules.DefaultTileMap
+import com.example.signaldoctor.mapUtils.CoordConversions.tileIndexFromLocation
 import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.uistates.MapScreenUiState
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.example.signaldoctor.workers.MsrWorkersInputData
-import com.example.signaldoctor.workers.noiseWork
+import com.example.signaldoctor.workers.NoiseMsrWorker
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.Priority
+import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import org.osmdroid.util.MapTileIndex
-import org.osmdroid.util.TileSystem
-import org.osmdroid.util.TileSystemWebMercator
 import org.osmdroid.views.MapView
-import java.util.concurrent.Executors
 import javax.inject.Inject
 
 const val POST_MSR_WORK_TAG = "postMsrWOrkTag"
@@ -56,20 +58,46 @@ const val MEASUREMENT_NOTIFICATION_CHANNEL_ID = "MEASUREMENT_CHANNEL"
 
 @HiltViewModel
 open class MyViewModel @Inject constructor(
-    msrsRepo: MsrsRepo,
+    private val settingsDataStore : DataStore<Settings>,
+    private val msrsRepo: MsrsRepo,
     val mapScreenUiState: MapScreenUiState,
-    @DefaultTileMap val map : MapView,
-    val locationProvider : FlowLocationProvider,
+    //@DefaultTileMap val map : MapView,
+    private val locationProvider : FlowLocationProvider,
     private val msrsWorkManager: MsrsWorkManager,
     private val notificationManager : NotificationManagerCompat,
     private val connectivityManager: FlowConnectivityManager,
     @ApplicationContext private val app : Context
 ) : ViewModel() {
 
-    val phoneAvgs = msrsRepo.getMergedAvgs(Measure.phone).onEach { hashMap ->
-        hashMap.forEach{entry ->
-        Log.i("OUTPUT AVGS", "KEY: ${entry.key}, VALUE: ${entry.value}")
-    }}.stateIn(viewModelScope, started = SharingStarted.Eagerly, initialValue = MsrsMap())
+    private val userSettings = settingsDataStore.data.onEach { settings ->
+        _msrsToTakeSetting.value = settings.msrsToTake
+        _measurementFrequency.value = settings.measurementsFrequency
+        _freshnessBound.value = settings.freshnessBound
+        _oldnessBound.value = settings.oldnessBound
+    }.stateIn(viewModelScope, started = SharingStarted.WhileSubscribed(), initialValue = Settings.getDefaultInstance() )
+
+    private val _msrsToTakeSetting : MutableStateFlow<Int?> = MutableStateFlow(null)
+    val msrsToTakeSetting  = _msrsToTakeSetting.asStateFlow()
+
+    private val _measurementFrequency : MutableStateFlow<Int?> = MutableStateFlow(null)
+    val measurementFrequency  = _measurementFrequency.asStateFlow()
+
+    private val _freshnessBound : MutableStateFlow<Long?> = MutableStateFlow(null)
+    val freshnessBound  = _freshnessBound.asStateFlow()
+
+    private val _oldnessBound : MutableStateFlow<Long?> = MutableStateFlow(null)
+    val oldnessBound  = _oldnessBound.asStateFlow()
+
+    private suspend fun setLastLocationUserSettings(newLocation : Location) {
+        settingsDataStore.updateData { settingsSnap ->
+            settingsSnap.toBuilder()
+                .setLastLocationLat(newLocation.latitude)
+                .setLastLocationLon(newLocation.longitude)
+                .build()
+        }
+    }
+
+    val phoneAvgs = msrsRepo.getMergedAvgs(Measure.phone).stateIn(viewModelScope, started = SharingStarted.Eagerly, initialValue = MsrsMap())
     val soundAvgs = msrsRepo.getMergedAvgs(Measure.sound)
         .stateIn(viewModelScope, started = SharingStarted.Eagerly, initialValue = MsrsMap())
     val wifiAvgs = msrsRepo.getMergedAvgs(Measure.wifi)
@@ -84,25 +112,33 @@ open class MyViewModel @Inject constructor(
 
     private val _lastWifiMsr : MutableStateFlow<Int?> = MutableStateFlow(null)
     val lastWifiMsr = _lastWifiMsr.asStateFlow()
-/*
-    val userLocation = locationProvider.requestLocationUpdates(
-        LocationRequest.Builder(LOCATION_INTERVAL).setPriority(LOCATION_PRIORITY)
-            .build()
-    ).stateIn(scope = viewModelScope, started= SharingStarted.WhileSubscribed(), initialValue = null)
-*/
+
+    private val _measurementProgress : MutableStateFlow<Float> = MutableStateFlow(0f)
+    val measurementProgress = _measurementProgress.asStateFlow()
+
+    private val locationUpdateSettings = LocationRequest.Builder(LOCATION_INTERVAL).setPriority(LOCATION_PRIORITY)
+        .build()
+
+
     private val _userLocation : MutableStateFlow<Location?> = MutableStateFlow(null)
     val userLocation = _userLocation.asStateFlow()
     private var locationUpdatesJob : Job? = null
+
+
+     fun checkLocationSettings(mainActivity: MainActivity) = viewModelScope.launch {
+            userLocation.value?.let { MapView.getTileSystem().tileIndexFromLocation(it )}
+            locationProvider.checkLocationSettings(locationUpdateSettings, mainActivity)
+    }
 
     fun locationUpdatesOn() {
 
         locationUpdatesJob = viewModelScope.launch{
 
-            locationProvider.requestLocationUpdates(
-                LocationRequest.Builder(LOCATION_INTERVAL).setPriority(LOCATION_PRIORITY)
-                    .build()
-            ).collect{ newLocation->
+            locationProvider.requestLocationUpdates(locationUpdateSettings).onCompletion {
+                _userLocation.value = null
+            }.collect{ newLocation->
                 _userLocation.value = newLocation
+
             }
 
         }
@@ -174,7 +210,18 @@ open class MyViewModel @Inject constructor(
     fun runMeasurement(msrType: Measure) {
 
 
-        val msrObserver = Observer<List<WorkInfo>> { workInfos ->
+        val msrWorkObserver = Observer<List<WorkInfo>> { workInfos ->
+
+                consoledebug("${measurementProgress.value}")
+                if(!workInfos.first().state.isFinished){
+                    _measurementProgress.value =
+                        workInfos.first().progress.getFloat(NoiseMsrWorker.Progress, 0f)
+                }else if(workInfos.last().progress.hasKeyWithValueOfType<Float>(NoiseMsrWorker.Progress)){
+                    _measurementProgress.value =
+                        workInfos.last().progress.getFloat(NoiseMsrWorker.Progress, 8/10f)
+                }
+
+
             workInfos.first().let { msrWorkInfo ->
                 if (msrWorkInfo.state == WorkInfo.State.SUCCEEDED) {
 
@@ -199,15 +246,21 @@ open class MyViewModel @Inject constructor(
                     }
                 }
             }
+            workInfos.last().let { postMsrWorkInfo ->
+                if (postMsrWorkInfo.state.isFinished) {
+                    _measurementProgress.value = 0f
+                    changeMeasuringState(MeasuringState.STOP)
+                }
+            }
         }
-
+/*
         val progressWorker = Observer<List<WorkInfo>> { workInfos ->
             workInfos.last().let { lastWorkInfo ->
                 if (lastWorkInfo.state.isFinished)
                     changeMeasuringState(MeasuringState.STOP)
             }
         }
-
+*/
         //the msrType is passed as a Measure object for logic in MsrsWorkManager and as a String so that it can be passed to workers
         val workInfos = msrsWorkManager.runMeasurement(
             msrType = msrType,
@@ -221,15 +274,10 @@ open class MyViewModel @Inject constructor(
         )
         changeMeasuringState(MeasuringState.RUNNING)
 
-        workInfos.observeForever(progressWorker)
-        workInfos.observeForever(msrObserver)
+        //workInfos.observeForever(progressWorker)
+        workInfos.observeForever(msrWorkObserver)
     }
 
-    fun runNoiseMeasurementDebug(){
-        Executors.newSingleThreadExecutor().submit{
-            noiseWork(app)
-        }
-    }
 
     fun cancelMeasurement(msrType : Measure){
         msrsWorkManager.cancelMeasurement(msrType)
@@ -245,6 +293,18 @@ open class MyViewModel @Inject constructor(
 
     init{
 
+        viewModelScope.launch{
+            userLocation.collect{ newLocation ->
+                newLocation?.let{
+                    setLastLocationUserSettings(newLocation)
+                }
+            }
+        }
+
+        mapScreenUiState.changeScreenLocation(
+            latitude = userSettings.value.lastLocationLat.takeUnless { it == 0.0 } ?: 44.494887,
+            longitude = userSettings.value.lastLocationLat.takeUnless { it == 0.0 } ?: 11.3426163
+        )
 
         //If location permissions are granted, start location update on app boot
         if(app.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -271,7 +331,10 @@ open class MyViewModel @Inject constructor(
 
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     override fun onCleared() {
+
+        msrsRepo.closeLocalDB()
         super.onCleared()
     }
 

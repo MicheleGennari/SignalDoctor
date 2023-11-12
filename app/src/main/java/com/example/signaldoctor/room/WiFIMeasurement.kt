@@ -1,15 +1,18 @@
 package com.example.signaldoctor.room
 
 import androidx.room.ColumnInfo
+import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import java.util.Date
+import com.example.signaldoctor.bin.MsrsMapEntry
+import com.example.signaldoctor.realtimeFirebase.WifiMeasurementFirebase
 
 @Entity(tableName = "wifi_table")
 data class WiFIMeasurement(
-    @PrimaryKey @ColumnInfo(name = "id") val id : Int,
-    @ColumnInfo(name="tile_index") val tileIndex : Long,
-    @ColumnInfo(name="value") val value : Int,
-    @ColumnInfo(name="date") val date : Long,
-    @ColumnInfo(name="user_id") val userId : Int,
+
+    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = TableColumn.ID) val id : Int? = null,
+
+    @Embedded
+    val baseMeasurementEntity: WifiMeasurementFirebase
+
 )

@@ -1,35 +1,39 @@
 package com.example.signaldoctor.repositories
 
-import com.example.signaldoctor.contracts.NetworkMode
 import com.example.signaldoctor.contracts.Measure
+import com.example.signaldoctor.hiltModules.DefaultLocalDB
 import com.example.signaldoctor.hiltModules.RealtimeFirebase
-import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.localDatabase.IMsrsLocalDB
+import com.example.signaldoctor.onlineDatabase.IMsrsOnlineDB
 import com.example.signaldoctor.workers.MsrWorkersInputData
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class MsrsRepo @Inject constructor(
-    @RealtimeFirebase val onlineDB : IMsrsOnlineDB,
-    //@RoomDatabase val localDB : IMsrsLocalDB
+    @RealtimeFirebase private val onlineDB : IMsrsOnlineDB,
+    @DefaultLocalDB private val localDB : IMsrsLocalDB,
 ) {
 
     fun getMergedAvgs(msrType : Measure) = onlineDB.getMsrsAvgs(msrType)
 
+    fun getLocalAvgs(msrType: Measure) = localDB.getMsrsAvgs(msrType)
+
     //fun getLocalAvgs(msrType: Measure) = localDB.getMsrsAvgs(msrType)
 
-    suspend fun postMsr(msr : Int, mapTileData : MsrWorkersInputData, networkMode: String = NetworkMode.ONLINE.name) : Boolean{
+    suspend fun postMsr(msr : Int, mapTileData : MsrWorkersInputData) : Boolean{
 
-        return if(networkMode == NetworkMode.ONLINE.name){
-            consoledebug("INSIDE POST MSR OF MsrsRepo")
-
-            onlineDB.postMsr(msr = msr, mapTileData = mapTileData)
-        } else false //localDB.postMsr()
+        return onlineDB.postMsr(msr = msr, mapTileData = mapTileData) && localDB.postMsr(msr, mapTileData)
 
     }
+
+    fun closeLocalDB() {
+        //FOR DEBUG PURPOSES, CANCEL THIS LINE FOR PRODUCTION!!!
+        localDB.clearAllTables()
+
+        localDB.close()
+    }
+
 
 }
 /*

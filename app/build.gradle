@@ -5,7 +5,10 @@ plugins {
     id 'kotlin-kapt'
     id("com.google.devtools.ksp")
     id 'com.google.dagger.hilt.android'
+    id "com.google.protobuf" version "0.9.4"
+
 }
+
 
 
 android {
@@ -15,7 +18,7 @@ android {
     defaultConfig {
         applicationId "com.example.signaldoctor"
         minSdk 24
-        targetSdk 33
+        targetSdk 34
         versionCode 1
         versionName "1.0"
 
@@ -119,8 +122,39 @@ dependencies {
 
     implementation("com.arthenica:ffmpeg-kit-full:6.0-2")
 
+    //used for storing preferences
+    implementation("androidx.datastore:datastore:1.0.0")
+
+    implementation('com.google.protobuf:protobuf-lite:3.0.0')
+
+    implementation("com.google.code.gson:gson:2.10.1")
 }
 
 kapt{
     correctErrorTypes true
+}
+
+protobuf {
+
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.7.0'
+    }
+
+    plugins {
+        javalite{
+            artifact = 'com.google.protobuf:protoc-gen-javalite:3.0.0'
+        }
+    }
+
+    generateProtoTasks {
+
+        all().configureEach {task ->
+            task.builtins {
+                remove java
+            }
+            task.plugins {
+                javalite{}
+            }
+        }
+    }
 }

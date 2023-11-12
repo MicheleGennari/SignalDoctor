@@ -20,6 +20,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 
+import com.example.signaldoctor.contracts.Measure;
 import com.example.signaldoctor.contracts.MsrsMap;
 
 import org.osmdroid.api.IGeoPoint;
@@ -86,11 +87,14 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
 
     protected MsrsMap avgsMap;
 
+    protected Measure msrType;
+
 
     public void setAvgsMap(MsrsMap avgsMap) {
         this.avgsMap = avgsMap;
     }
 
+    public void setMsrType(Measure msrType){this.msrType = msrType;}
 
     /**
      * A drawable loading tile
@@ -125,11 +129,11 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
      */
     private final TileStates mTileStates = new TileStates();
 
-    public SquaredZonesOverlay2(final MapTileProviderBase aTileProvider, final Context aContext, final MsrsMap avgMap) {
-        this(aTileProvider, aContext, true, true, avgMap);
+    public SquaredZonesOverlay2(final MapTileProviderBase aTileProvider, final Context aContext, final MsrsMap avgMap, final Measure msrType) {
+        this(aTileProvider, aContext, true, true, avgMap, msrType);
     }
 
-    public SquaredZonesOverlay2(final MapTileProviderBase aTileProvider, final Context aContext, boolean horizontalWrapEnabled, boolean verticalWrapEnabled, MsrsMap avgsMap) {
+    public SquaredZonesOverlay2(final MapTileProviderBase aTileProvider, final Context aContext, boolean horizontalWrapEnabled, boolean verticalWrapEnabled, final MsrsMap avgsMap, final Measure msrType) {
         super();
         this.ctx = aContext;
         if (aTileProvider == null) {
@@ -140,6 +144,7 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
         setHorizontalWrapEnabled(horizontalWrapEnabled);
         setVerticalWrapEnabled(verticalWrapEnabled);
         setAvgsMap(avgsMap);
+        setMsrType(msrType);
     }
 
     /**
@@ -391,11 +396,19 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
         c.drawRect(tileRect, gridPaint);
         if(avg == null) return;
 
-        if(avg>-32){
-            msrPaint.setColor(Color.GREEN);
-        }else if(avg > -60){
-            msrPaint.setColor(Color.YELLOW);
-        }else msrPaint.setColor(Color.RED);
+        if(msrType!= Measure.sound){
+            if (avg > -32) {
+                msrPaint.setColor(Color.GREEN);
+            } else if (avg > -60) {
+                msrPaint.setColor(Color.YELLOW);
+            } else msrPaint.setColor(Color.RED);
+        }else{
+            if (avg > -32) {
+                msrPaint.setColor(Color.RED);
+            } else if (avg > -60) {
+                msrPaint.setColor(Color.YELLOW);
+            } else msrPaint.setColor(Color.GREEN);
+        }
 
         msrPaint.setAlpha(100);
 

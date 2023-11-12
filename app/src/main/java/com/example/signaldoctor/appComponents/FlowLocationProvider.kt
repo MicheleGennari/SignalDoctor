@@ -1,8 +1,13 @@
 package com.example.signaldoctor.appComponents
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Context
+import android.content.IntentSender
 import android.location.Location
 import android.os.Looper
+import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.*
 import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.awaitCancellation
@@ -11,6 +16,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+
+
+const val CHANGE_LOCATION_SETTINGS = 42
 
 
 class FlowLocationProvider @Inject constructor(
@@ -47,18 +55,19 @@ class FlowLocationProvider @Inject constructor(
 
     }
 
-    /*
-    private suspend fun checkLocationRequest(lr: LocationRequest) = suspendCancellableCoroutine<Boolean> {continuation->
+     suspend fun checkLocationSettings(lr: LocationRequest, mainActivity: MainActivity) =
+        suspendCancellableCoroutine { continuation->
 
-        settingsClient.checkLocationSettings(
-            LocationSettingsRequest.Builder().addLocationRequest(lr).build()
-        ).addOnSuccessListener { response->
-            continuation.resume(true)
-        }.addOnFailureListener { exception->
-            continuation.resumeWithException(exception)
+            settingsClient.checkLocationSettings(
+                LocationSettingsRequest.Builder().addLocationRequest(lr).build()
+            ).addOnSuccessListener { _ ->
+                continuation.resume(true)
+            }.addOnFailureListener { exception->
+                if(exception is ResolvableApiException){
+                    exception.startResolutionForResult(mainActivity, CHANGE_LOCATION_SETTINGS)
+                }
+            }
         }
-    }
-    */
 
 
 
@@ -78,7 +87,6 @@ class FlowLocationProvider @Inject constructor(
         }
 
     }
-
 
 
 }

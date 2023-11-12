@@ -2,6 +2,7 @@ package com.example.signaldoctor.workers
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.ConnectivityManager.NetworkCallback
 import android.net.Network
@@ -54,50 +55,64 @@ class WifiMsrWorker(private val ctx: Context, params: WorkerParameters) : Corout
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
-        return ForegroundInfo(
+
+        val workerNotification =  NotificationCompat.Builder(ctx, MEASUREMENT_NOTIFICATION_CHANNEL_ID).apply {
+
+            setContentTitle(ctx.getString(R.string.wifi_measurement_notification_content_title))
+            setSmallIcon(R.drawable.wifi_icon_notification_bitmap)
+            setProgress(0,0, true)
+            setOngoing(true)
+            if(Build.VERSION.SDK_INT< Build.VERSION_CODES.O) priority = NotificationCompat.PRIORITY_HIGH
+
+        }.build()
+
+        return if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ForegroundInfo(
             Measure.wifi.ordinal,
-            NotificationCompat.Builder(ctx, MEASUREMENT_NOTIFICATION_CHANNEL_ID).apply {
-
-                setContentTitle(ctx.getString(R.string.wifi_measurement_notification_content_title))
-                setSmallIcon(R.drawable.wifi_icon_notification_bitmap)
-                setProgress(0,0, true)
-                setOngoing(true)
-                if(Build.VERSION.SDK_INT< Build.VERSION_CODES.O) priority = NotificationCompat.PRIORITY_HIGH
-
-            }.build()
+           workerNotification,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE
         )
-    }
-}
+        else ForegroundInfo(
+            Measure.wifi.ordinal,
+            workerNotification,
+        )
 
-@SuppressLint("MissingPermission")
-suspend fun wifiWorkOlderBuilds(wifiManager: WifiManager) : Result {
-    return if (wifiManager.isWifiEnabled) {
+    }
+
+    @SuppressLint("MissingPermission")
+    suspend fun wifiWorkOlderBuilds(wifiManager: WifiManager) : Result {
+        return if (wifiManager.isWifiEnabled) {
+            var msr = 0
+            for (i in 1..5){
+                delay(1000)
+                msr += wifiManager.connectionInfo.rssi
+                setProgress(workDataOf(NoiseMsrWorker.Progress to i/10f))
+            }
+            msr /= 5
+            consoledebug("$msr")
+            Result.success(workDataOf(MsrWorkersInputData.MSR_KEY to msr))
+        } else Result.failure()
+    }
+
+    suspend fun wifiWorkNewerBuilds(cm : ConnectivityManager) : Result {
         var msr = 0
         for (i in 1..5){
-            delay(1000)
-            msr += wifiManager.connectionInfo.rssi
+            try{
+                msr += wifiSignalStrength(cm)
+                delay(1000)
+            }catch (e : IOException){
+                Result.failure()
+            }
         }
         msr /= 5
         consoledebug("$msr")
-        Result.success(workDataOf(MsrWorkersInputData.MSR_KEY to msr))
-    } else Result.failure()
-}
-
-
-suspend fun wifiWorkNewerBuilds(cm : ConnectivityManager) : Result {
-    var msr = 0
-    for (i in 1..5){
-        try{
-            msr += wifiSignalStrength(cm)
-            delay(1000)
-        }catch (e : IOException){
-            Result.failure()
-        }
+        return Result.success(workDataOf(MsrWorkersInputData.MSR_KEY to msr))
     }
-    msr /= 5
-    consoledebug("$msr")
-    return Result.success(workDataOf(MsrWorkersInputData.MSR_KEY to msr))
+
 }
+
+
+
+
 
 suspend fun wifiSignalStrength(cm : ConnectivityManager)  = suspendCancellableCoroutine { continuation ->
     val callback = @RequiresApi(Build.VERSION_CODES.S) object : NetworkCallback(FLAG_INCLUDE_LOCATION_INFO){
@@ -118,7 +133,6 @@ suspend fun wifiSignalStrength(cm : ConnectivityManager)  = suspendCancellableCo
         NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
             .build(),
         callback
     )

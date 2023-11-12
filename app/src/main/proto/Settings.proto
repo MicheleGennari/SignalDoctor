@@ -1,0 +1,28 @@
+
+syntax = "proto3";
+
+option java_package = "com.example.signaldoctor";
+option java_multiple_files = true;
+
+message Settings{
+  bool onlineMode= 1;
+
+  int32 noiseMsrFreq = 2;
+  int32 noiseEvaluatedMsrs = 3;
+
+  int32 phoneMsrFreq = 4;
+  int32 phoneEvaluatedMsrs = 5;
+
+  int32 wifiMsrFreq = 6;
+  int32 wifiEvaluatedMsrs = 7;
+
+  double lastLocationLat = 8;
+  double lastLocationLon = 9;
+
+  int32 msrsToTake = 10;
+  int32 measurementsFrequency = 11;
+
+  int64 freshnessBound = 12;
+  int64 oldnessBound = 13;
+
+}

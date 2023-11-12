@@ -12,7 +12,6 @@ import com.example.signaldoctor.workers.NoiseMsrWorker
 import com.example.signaldoctor.workers.PhoneMsrWorker
 import com.example.signaldoctor.workers.PostMsrWorker
 import com.example.signaldoctor.workers.WifiMsrWorker
-import java.util.UUID
 import javax.inject.Inject
 
 const val MEASURE_WORK_TAG = "MEASURE_WORK"
@@ -36,7 +35,6 @@ class MsrsWorkManager @Inject constructor(private val workManager: WorkManager) 
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .setInputData(inputData.asWorkData())
             .build()
-
 
         workManager.beginUniqueWork(
             msrType.name,

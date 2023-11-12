@@ -179,7 +179,7 @@ public class SquaredZonesOverlay extends Overlay {
             msrsMap.forEach( (key, avg )-> {
 
 
-                if(test< Long.valueOf(key)){
+                if(test< Long.parseLong(key)){
                     Log.i("dbmapTileIndex: ", ""+Long.valueOf(key) );
                     if(mapTileAvg.get() == null) {
 
