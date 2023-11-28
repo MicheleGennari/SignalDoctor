@@ -1,11 +1,11 @@
 package com.example.signaldoctor.room
 
 object TableColumn {
-    const val TILE_INDEX = "TILE_INDEX"
-    const val ID = "ID"
-    const val UUID = "UUID"
-    const val VALUE = "VALUE"
-    const val DATE = "DATE"
-    const val USERID = "USER_ID"
-    const val IS_LTE = "IS_LTE"
+    const val tile_index = "tile_index"
+    const val id = "id"
+    const val uuid = "uuid"
+    const val value = "value"
+    const val date = "date"
+    const val userid = "user_id"
+    const val is_lte = "is_lte"
 }

@@ -325,7 +325,7 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
                     AtomicReference<Integer> mapTileAvg = new AtomicReference<>(null);
                     avgsMap.forEach( (key, avg )-> {
                         //if condition has to be defined yet
-                        if(checkIfTile1ContainsTile2(pMapTileIndex, Long.parseLong(key))){
+                        if(checkIfTile1ContainsTile2(pMapTileIndex, key)){
                             if(mapTileAvg.get() == null) {
 
                                 mapTileAvg.set(avg);
@@ -459,7 +459,7 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
             final String title = ctx.getString(
                     pMapView.useDataConnection() ? R.string.set_mode_offline
                             : R.string.set_mode_online);
-            final Drawable icon = ctx.getResources().getDrawable(R.drawable.ic_menu_offline);
+            final Drawable icon = ctx.getResources().getDrawable(R.drawable.ic_menu_offline, null);
             pMenu.add(0, MENU_OFFLINE + pMenuIdOffset, Menu.NONE, title).setIcon(icon);
             pMenu.add(0, MENU_SNAPSHOT + pMenuIdOffset, Menu.NONE, R.string.snapshot);
             pMenu.add(0, MENU_STATES + pMenuIdOffset, Menu.NONE, R.string.states);

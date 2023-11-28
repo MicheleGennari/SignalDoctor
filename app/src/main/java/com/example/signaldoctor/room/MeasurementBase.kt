@@ -1,13 +1,15 @@
 package com.example.signaldoctor.room
 
 import androidx.room.ColumnInfo
+import com.example.signaldoctor.contracts.IMsrsDB
+import java.util.Date
 import java.util.UUID
 
 data class MeasurementBase(
-    @ColumnInfo(name= TableColumn.TILE_INDEX) val tileIndex : Long = 0 ,
-    @ColumnInfo(name= TableColumn.UUID) val uuid : UUID = UUID.randomUUID(),
-    @ColumnInfo(name= TableColumn.VALUE) val value : Int = 0,
-    @ColumnInfo(name= TableColumn.DATE) val date : Long = 0,
+    @ColumnInfo(name= TableColumn.tile_index) val tileIndex : Long = 0,
+    @ColumnInfo(name= TableColumn.uuid) val uuid : Long = System.currentTimeMillis(),
+    @ColumnInfo(name= TableColumn.value) var value : Int = 0,
+    @ColumnInfo(name= TableColumn.date) val date : Date = Date(),
 ){
     companion object s{
 

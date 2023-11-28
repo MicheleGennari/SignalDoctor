@@ -11,8 +11,8 @@ import com.example.signaldoctor.realtimeFirebase.SoundMeasurementFirebase
 @Entity(tableName = "sound_table")
 data class SoundMeasurement(
 
-    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = TableColumn.ID) val id : Int? = null,
+    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = TableColumn.id) val id : Int? = null,
     @Embedded
-    val firebaseTable : SoundMeasurementFirebase
+    val firebaseTable : SoundMeasurementFirebase = SoundMeasurementFirebase()
 
 )

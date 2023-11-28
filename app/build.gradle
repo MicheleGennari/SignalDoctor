@@ -1,14 +1,14 @@
 plugins {
+    id "com.google.protobuf" version "0.9.4"
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
     id 'com.google.gms.google-services'
-    id 'kotlin-kapt'
     id("com.google.devtools.ksp")
     id 'com.google.dagger.hilt.android'
-    id "com.google.protobuf" version "0.9.4"
+
+    id 'kotlin-kapt'
 
 }
-
 
 
 android {
@@ -52,6 +52,7 @@ android {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
     }
+
 }
 
 dependencies {
@@ -116,6 +117,8 @@ dependencies {
 
     implementation("androidx.hilt:hilt-work:1.1.0")
     kapt("androidx.hilt:hilt-compiler:1.1.0")
+
+    implementation("androidx.hilt:hilt-navigation-compose:1.0.0")
 
     // library containing FFT algorithm
     implementation("com.github.wendykierp:JTransforms:3.1")

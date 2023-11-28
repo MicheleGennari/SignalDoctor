@@ -10,8 +10,8 @@ import com.example.signaldoctor.realtimeFirebase.PhoneMeasurementFirebase
 @Entity(tableName = "phone_table")
 data class PhoneMeasurement(
 
-    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = TableColumn.ID) val id : Int? = null,
+    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = TableColumn.id) val id : Int? = null,
     @Embedded
-    val firebaseTable : PhoneMeasurementFirebase
+    val firebaseTable : PhoneMeasurementFirebase = PhoneMeasurementFirebase()
 )
 

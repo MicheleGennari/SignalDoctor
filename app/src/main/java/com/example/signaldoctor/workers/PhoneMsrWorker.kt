@@ -8,7 +8,9 @@ import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
+import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ForegroundInfo
 import androidx.work.ListenableWorker.*
 import androidx.work.WorkerParameters
@@ -16,11 +18,24 @@ import androidx.work.workDataOf
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
+import com.example.signaldoctor.realtimeFirebase.PhoneMeasurementFirebase
+import com.example.signaldoctor.realtimeFirebase.WifiMeasurementFirebase
+import com.example.signaldoctor.room.MeasurementBase
+import com.example.signaldoctor.room.PhoneMeasurement
+import com.example.signaldoctor.room.WiFIMeasurement
 import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.google.gson.Gson
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
 import kotlinx.coroutines.delay
 import javax.inject.Inject
 
-class PhoneMsrWorker(private val ctx : Context, val params : WorkerParameters) :CoroutineWorker(ctx, params) {
+@HiltWorker
+class PhoneMsrWorker @AssistedInject constructor(
+    @Assisted private val ctx : Context,
+    @Assisted private val params : WorkerParameters,
+    private val gson : Gson
+) :CoroutineWorker(ctx, params) {
 
 
     override suspend fun doWork() : Result{
@@ -56,7 +71,7 @@ class PhoneMsrWorker(private val ctx : Context, val params : WorkerParameters) :
         )
     }
 
-    suspend fun phoneWorkNewerBuilds(ctx : Context, telephonyManager: TelephonyManager) : Result {
+    private suspend fun phoneWorkNewerBuilds(ctx : Context, telephonyManager: TelephonyManager) : Result {
 
         if (!ctx.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY))
             return Result.failure()
@@ -75,7 +90,24 @@ class PhoneMsrWorker(private val ctx : Context, val params : WorkerParameters) :
         }
         msr /= 5
         consoledebug("$msr")
-        return Result.success(workDataOf(MsrWorkersInputData.MSR_KEY to msr))
+        val outputData = Data.Builder()
+            .putInt(MeasurementBase.MSR_KEY, msr)
+            .putString(MeasurementBase.MSR_TYPE_KEY, gson.toJson(Measure.phone))
+            .putString(MEASUREMENT_KEY,
+                gson.toJson(PhoneMeasurement(
+                    firebaseTable = PhoneMeasurementFirebase(
+                        isLTE = false,
+                        baseInfo = MeasurementBase(
+                            tileIndex = inputData.getValue(MeasurementBase.TILE_INDEX_KEY),
+                            value = msr
+                        )
+                    )
+                ))
+                )
+            .build()
+        Log.i("PHONE MSR WORKER", "output data is ${if(outputData == Data.EMPTY) "empty" else "filled"}")
+        return Result.success(outputData)
     }
+    
 }
 

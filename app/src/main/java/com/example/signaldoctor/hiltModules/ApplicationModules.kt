@@ -4,17 +4,18 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.room.Room
-import com.example.signaldoctor.Settings
+import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.contracts.FirebaseContracts
 import com.example.signaldoctor.localDatabase.IMsrsLocalDB
 import com.example.signaldoctor.localDatabase.RoomDBImpl
 import com.example.signaldoctor.onlineDatabase.RealtimeDBImpl
 import com.example.signaldoctor.onlineDatabase.IMsrsOnlineDB
 import com.example.signaldoctor.room.MsrsDB
-import com.example.signaldoctor.utils.SettingsSerializer
+import com.example.signaldoctor.utils.AppSettingsSerializer
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ktx.database
 import com.google.firebase.ktx.Firebase
+import com.google.gson.Gson
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -34,10 +35,17 @@ annotation class DefaultLocalDB
 
 const val dataStoresDir = "datastore"
 const val settingsDataStoreFileName = "Settings.pb"
+const val appSettingsDataStoreFileName = "AppSettings.pb"
 
 @Module
 @InstallIn(SingletonComponent::class)
 class ApplicationModules {
+
+    @Singleton
+    @Provides
+    fun provideJsonConverter() : Gson {
+        return Gson()
+    }
 
     @Singleton
     @Provides
@@ -47,10 +55,10 @@ class ApplicationModules {
 
     @Singleton
     @Provides
-    fun provideSettingsDataStore(@ApplicationContext app : Context) : DataStore<Settings> {
+    fun provideUserSettingsDataStore(@ApplicationContext app : Context) : DataStore<AppSettings> {
         return DataStoreFactory.create(
-            serializer = SettingsSerializer(),
-            produceFile = { app.filesDir.resolve("$dataStoresDir/$settingsDataStoreFileName") }
+            serializer = AppSettingsSerializer(),
+            produceFile = { app.filesDir.resolve("$dataStoresDir/$appSettingsDataStoreFileName") }
         )
     }
 
@@ -58,6 +66,7 @@ class ApplicationModules {
     @Provides
     fun bindRoomDB(@ApplicationContext ctx: Context) : MsrsDB {
         return Room.databaseBuilder(ctx, MsrsDB::class.java, name = "signal-doctor-measurements")
+            .fallbackToDestructiveMigration()
           /*  .addCallback(callback = object : RoomDatabase.Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     super.onCreate(db)
@@ -91,5 +100,6 @@ abstract class ApplicationBindModules{
     @Singleton
     @Binds
     abstract fun bindRoomDB( db: RoomDBImpl) : IMsrsLocalDB
+
 
 }

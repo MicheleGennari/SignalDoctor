@@ -9,7 +9,7 @@ data class PhoneMeasurementFirebase(
 
     @Embedded
     val baseInfo : MeasurementBase = MeasurementBase(),
-    @ColumnInfo(name= TableColumn.IS_LTE) val isLTE : Boolean? = null
+    @ColumnInfo(name= TableColumn.is_lte) val isLTE : Boolean? = false
 
     )
 

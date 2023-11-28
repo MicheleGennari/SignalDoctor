@@ -1,9 +1,14 @@
 package com.example.signaldoctor.screens
 
 import android.location.Location
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandIn
+import androidx.compose.animation.shrinkOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -25,11 +30,13 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,16 +45,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.CHANGE_LOCATION_SETTINGS
 import com.example.signaldoctor.appComponents.MainActivity
@@ -65,8 +72,6 @@ import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.android.gms.common.api.ResolvableApiException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.osmdroid.tileprovider.MapTileProviderBasic
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -77,20 +82,27 @@ import org.osmdroid.views.MapView
 fun MapScreen(
     modifier: Modifier = Modifier,
     viewModel: MyViewModel,
+    navigateToSettings : () -> Unit = {}
     ){
     SignalDoctorTheme {
-
 
         val locationPermission = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION){ isGranted ->
             when(isGranted) {
                 true -> {
                     consoledebug("Permission GRANTED")
-                    viewModel.locationUpdatesOn()
+                    //viewModel.locationUpdatesOn()
                 }
                 false -> consoledebug("Permission DENIED")
             }
         }
 
+        LaunchedEffect(locationPermission.status.isGranted){
+            consoledebug("LocationUpdates effect launched by (re-)composition")
+            viewModel.locationUpdatesOn()
+            viewModel.setUserLocationAsScreenLocation()
+        }
+
+        val currentNetworkMode by viewModel.networkMode.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
         val currentMsrType by viewModel.mapScreenUiState.currentMsrType.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
 
         val recordPermission = rememberPermissionState(permission = android.Manifest.permission.RECORD_AUDIO){
@@ -121,15 +133,25 @@ fun MapScreen(
         Scaffold(
             topBar = {
 
-                SearchBar(
-                    modifier = Modifier,
-                    alignment= Alignment.Center,
-                    text = searchBarText,
-                    onQueryChange = {updatedText->
-                                        viewModel.mapScreenUiState.updateSearchBarText(updatedText)
-                                    },
-                    onSearch = {query -> viewModel.setScreenLocationFromQueryString(query)}
-                )
+                Column(
+                    modifier = Modifier.padding(7.dp)
+                ){
+
+                    SearchBar(
+                        modifier = Modifier,
+                        alignment = Alignment.Center,
+                        text = searchBarText,
+                        onQueryChange = { updatedText ->
+                            viewModel.mapScreenUiState.updateSearchBarText(updatedText)
+                        },
+                        onSearch = { query -> viewModel.setScreenLocationFromQueryString(query) }
+                    )
+
+                    NetworkModeToggleButton(
+                        checked = currentNetworkMode == NetworkMode.ONLINE,
+                        onCheckedChange = { viewModel.switchNetworkMode() }
+                    )
+                }
             },
 
             content = { paddingValues ->
@@ -167,7 +189,6 @@ fun MapScreen(
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
 
-                        val cs = rememberCoroutineScope()
                         val mainActivity = LocalContext.current as MainActivity
 
                         UserLocationButton(
@@ -216,6 +237,10 @@ fun MapScreen(
                                     )
                                 }
                             }
+                        )
+
+                        SettingsButton(
+                            onClick = navigateToSettings
                         )
                     }
 
@@ -349,18 +374,6 @@ fun Map(
             }
         //consoledebug("CRASH TEST")
     }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_START) {
-                map.onResume()
-            } else if (event == Lifecycle.Event.ON_STOP) {
-                map.onPause()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
 }
 
 /*@OptIn(ExperimentalMaterial3Api::class)
@@ -429,15 +442,29 @@ fun SearchBar(
                     contentDescription = "Search button"
                 )
             })
-        {
-
-        }
+        {}
     }
 }
 
 ////////////////////////////////////////////
 // Composables for Buttons
 ///////////////////////////////////////
+
+@Composable
+@Preview(name = "Network Mode Toggle Button")
+fun NetworkModeToggleButton(
+    modifier: Modifier = Modifier,
+    checked : Boolean = false,
+    enabled: Boolean = true,
+    onCheckedChange : (Boolean) -> Unit = {},
+
+){
+    Switch(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        enabled = true
+    )
+}
 
 @Composable
 @Preview(name = "get user location button")
@@ -479,7 +506,7 @@ fun MeasuringButton(
     )
 
     ExtendedFloatingActionButton(
-        modifier = Modifier
+        modifier = modifier
             .size(100.dp)
             .graphicsLayer {
                 this.scaleX = pressedAnimation
@@ -489,7 +516,56 @@ fun MeasuringButton(
         text = {},
         expanded = false,
         containerColor = MaterialTheme.colorScheme.onPrimary,
-        icon = { when (measuringState) {
+        onClick = onClick,
+        shape = CircleShape,
+        icon = {
+
+                Box(modifier = Modifier){
+                    if(measuringState == MeasuringState.RUNNING)
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(10.dp),
+                            progress = measurementProgress
+                        )
+                    AnimatedContent(
+                        targetState = measuringState,
+                        contentAlignment = Alignment.Center,
+                        label = "measuring state button animation",
+                        transitionSpec = {
+                                expandIn(
+                                    expandFrom = Alignment.Center,
+                                    animationSpec = tween(
+                                        durationMillis= 100,
+                                    )
+                                ) {
+                                    IntSize.Zero
+                                }.togetherWith( shrinkOut(
+                                    animationSpec= tween(
+                                        durationMillis = 100,
+                                    ),
+                                    shrinkTowards = Alignment.Center
+                                ) {
+                                    IntSize.Zero
+                                })
+                        },
+                    ) { measuringState ->
+                        Icon(
+                            modifier = Modifier.padding(if (measuringState == MeasuringState.STOP) 20.dp else 25.dp),
+                            //.padding(top = 20.dp, bottom = 20.dp, start = 6.dp, end = 6.dp)
+                            //.offset(10.dp),
+                            painter = painterResource(
+                                id = when (measuringState) {
+                                    MeasuringState.STOP -> R.drawable.play_icon
+                                    MeasuringState.RUNNING -> R.drawable.stop_icon
+                                    MeasuringState.BACKGROUND -> R.drawable.stop_icon
+                                }
+                            ), contentDescription = "Measuring Button"
+                        )
+                    }
+                }
+           /* when (measuringState) {
+
                     MeasuringState.STOP -> {
                         Icon(
                             modifier = Modifier.padding(20.dp),
@@ -524,12 +600,29 @@ fun MeasuringButton(
                         )
                         */
                     }
-                }
+                }*/
 
-           },
-        onClick = onClick,
-        shape = CircleShape
+           }
     )
+}
+
+@Composable
+@Preview("Settings Button")
+fun SettingsButton(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
+){
+    SmallFloatingActionButton(
+        onClick = onClick,
+        modifier = modifier.size(60.dp),
+
+    ) {
+        Icon(
+            modifier = Modifier.padding(4.dp),
+            painter = painterResource(id = R.drawable.settings_icon) ,
+            contentDescription = "Settings Button"
+        )
+    }
 }
 
 

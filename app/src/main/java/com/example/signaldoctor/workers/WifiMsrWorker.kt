@@ -22,7 +22,13 @@ import androidx.work.workDataOf
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
+import com.example.signaldoctor.realtimeFirebase.WifiMeasurementFirebase
+import com.example.signaldoctor.room.MeasurementBase
+import com.example.signaldoctor.room.WiFIMeasurement
 import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.google.gson.Gson
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
@@ -33,9 +39,12 @@ import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-class WifiMsrWorker(private val ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
-    params
-) {
+class WifiMsrWorker @AssistedInject constructor(
+    @Assisted ctx: Context,
+    @Assisted params: WorkerParameters,
+    private val gson : Gson
+    )
+    : CoroutineWorker(ctx, params) {
 
     override suspend fun doWork(): Result {
         try{
@@ -46,9 +55,9 @@ class WifiMsrWorker(private val ctx: Context, params: WorkerParameters) : Corout
         }
         return when{
 
-            Build.VERSION.SDK_INT<Build.VERSION_CODES.S -> wifiWorkOlderBuilds(ctx.getSystemService(Context.WIFI_SERVICE) as WifiManager)
+            Build.VERSION.SDK_INT<Build.VERSION_CODES.S -> wifiWorkOlderBuilds(applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
 
-            Build.VERSION.SDK_INT>=Build.VERSION_CODES.S -> wifiWorkNewerBuilds(ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
+            Build.VERSION.SDK_INT>=Build.VERSION_CODES.S -> wifiWorkNewerBuilds(applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
 
             else -> Result.failure()
         }
@@ -56,9 +65,9 @@ class WifiMsrWorker(private val ctx: Context, params: WorkerParameters) : Corout
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
 
-        val workerNotification =  NotificationCompat.Builder(ctx, MEASUREMENT_NOTIFICATION_CHANNEL_ID).apply {
+        val workerNotification =  NotificationCompat.Builder(applicationContext, MEASUREMENT_NOTIFICATION_CHANNEL_ID).apply {
 
-            setContentTitle(ctx.getString(R.string.wifi_measurement_notification_content_title))
+            setContentTitle(applicationContext.getString(R.string.wifi_measurement_notification_content_title))
             setSmallIcon(R.drawable.wifi_icon_notification_bitmap)
             setProgress(0,0, true)
             setOngoing(true)
@@ -88,8 +97,19 @@ class WifiMsrWorker(private val ctx: Context, params: WorkerParameters) : Corout
                 setProgress(workDataOf(NoiseMsrWorker.Progress to i/10f))
             }
             msr /= 5
-            consoledebug("$msr")
-            Result.success(workDataOf(MsrWorkersInputData.MSR_KEY to msr))
+            val outputData = workDataOf(
+                MeasurementBase.MSR_KEY to printAndReturn("wifi worker result: ",msr),
+                MeasurementBase.MSR_TYPE_KEY to gson.toJson(Measure.wifi),
+                 MEASUREMENT_KEY to gson.toJson(WiFIMeasurement(
+                    firebaseTable = WifiMeasurementFirebase(
+                        MeasurementBase(
+                            tileIndex = inputData.getValue(MeasurementBase.TILE_INDEX_KEY),
+                            value = msr
+                        )
+                    )
+                ))
+                )
+            return Result.success(outputData)
         } else Result.failure()
     }
 
@@ -104,12 +124,27 @@ class WifiMsrWorker(private val ctx: Context, params: WorkerParameters) : Corout
             }
         }
         msr /= 5
-        consoledebug("$msr")
-        return Result.success(workDataOf(MsrWorkersInputData.MSR_KEY to msr))
+        val outputData = workDataOf(
+            MeasurementBase.MSR_KEY to printAndReturn("wifi worker result: ",msr),
+            MeasurementBase.MSR_TYPE_KEY to gson.toJson(Measure.wifi),
+            MEASUREMENT_KEY to gson.toJson(WiFIMeasurement(
+                firebaseTable = WifiMeasurementFirebase(
+                    MeasurementBase(
+                        tileIndex = inputData.getValue(MeasurementBase.TILE_INDEX_KEY),
+                        value = msr
+                    )
+                )
+            ))
+        )
+        return Result.success(outputData)
     }
 
 }
 
+fun <T> printAndReturn(tag : String,t: T) : T{
+    Log.i(tag, "$t")
+    return t
+}
 
 
 

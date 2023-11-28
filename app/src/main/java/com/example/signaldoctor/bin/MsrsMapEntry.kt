@@ -5,9 +5,9 @@ import com.example.signaldoctor.room.TableColumn
 
 
 data class MsrsMapEntry(
-    @ColumnInfo(name = TableColumn.DATE) val date : Long? = null,
-    @ColumnInfo(name = TableColumn.TILE_INDEX) val tileIndex : Long? = null,
-    @ColumnInfo(name = TableColumn.VALUE) val value : Int? = null
+    @ColumnInfo(name = TableColumn.date) val date : Long? = null,
+    @ColumnInfo(name = TableColumn.tile_index) val tileIndex : Long? = null,
+    @ColumnInfo(name = TableColumn.value) val value : Int? = null
 ){
 
 

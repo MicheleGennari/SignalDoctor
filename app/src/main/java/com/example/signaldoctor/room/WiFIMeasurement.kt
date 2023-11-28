@@ -10,9 +10,9 @@ import com.example.signaldoctor.realtimeFirebase.WifiMeasurementFirebase
 @Entity(tableName = "wifi_table")
 data class WiFIMeasurement(
 
-    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = TableColumn.ID) val id : Int? = null,
+    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = TableColumn.id) val id : Int? = null,
 
     @Embedded
-    val baseMeasurementEntity: WifiMeasurementFirebase
+    val firebaseTable: WifiMeasurementFirebase = WifiMeasurementFirebase()
 
 )
