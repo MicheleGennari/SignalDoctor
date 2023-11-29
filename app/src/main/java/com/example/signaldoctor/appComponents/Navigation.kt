@@ -37,15 +37,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         getInstance().load(applicationContext, PreferenceManager.getDefaultSharedPreferences(applicationContext))
         setContent {
+
             val navController = rememberNavController()
+
             NavHost(
                 navController = navController ,
-                startDestination = DestinationsInfo.DestinationGraphMain.route,
+                startDestination = DestinationsInfo.MapScreen.route,
             ){
-                navigation(
-                    startDestination = DestinationsInfo.MapScreen.route,
-                    route = DestinationsInfo.DestinationGraphMain.route
-                ){
                     //MapScreen route
                     composable(
                         route = DestinationsInfo.MapScreen.route,
@@ -57,14 +55,15 @@ class MainActivity : ComponentActivity() {
                         }
                     ) {backStackEntry->
 
+                        /*
                         val mainGraph = remember(backStackEntry){
                             navController.getBackStackEntry(DestinationsInfo.DestinationGraphMain.route)
                         }
 
                         val viewModel : MyViewModel = hiltViewModel(mainGraph)
+                        */
 
                         MapScreen(
-                            viewModel = viewModel,
                             navigateToSettings = {
                                 navController.navigate(DestinationsInfo.SettingsScreen.route)
                             }
@@ -87,17 +86,16 @@ class MainActivity : ComponentActivity() {
                         }
                     ) {backStackEntry ->
 
+                        /*
                         val mainGraph = remember(backStackEntry){
                             navController.getBackStackEntry(DestinationsInfo.DestinationGraphMain.route)
                         }
 
                         val viewModel : MyViewModel = hiltViewModel(mainGraph)
+                        */
 
-                        SettingsScreen(
-                            viewModel = viewModel
-                        )
+                        SettingsScreen()
                     }
-                }
             }
         }
 

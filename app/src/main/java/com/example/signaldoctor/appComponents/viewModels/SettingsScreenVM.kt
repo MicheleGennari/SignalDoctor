@@ -5,33 +5,35 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.MeasurementSettings
+import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.MeasurementSettingsPopulatedDefaultInstance
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 @HiltViewModel
 class SettingsScreenVM @Inject constructor(
-    val userSettings: DataStore<AppSettings>
+    userSettings: DataStore<AppSettings>
 ) : ViewModel() {
-    init {
-        
-        userSettings.data.onEach {  updatedAppSettings ->
-            _phoneSettings.value = updatedAppSettings.phoneSettings
-            _noiseSettings.value = updatedAppSettings.noiseSettings
-            _wifiSettings.value = updatedAppSettings.wifiSettings
-        }.launchIn(viewModelScope)
 
+    init {
+        consoledebug("A Settings Screen ViewModel is now created")
     }
 
-    private val _phoneSettings = MutableStateFlow(MeasurementSettings.getDefaultInstance())
-    val phoneSettings = _phoneSettings.asStateFlow()
+    val phoneSettings = userSettings.data.map { it.phoneSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettingsPopulatedDefaultInstance())
 
-    private val _noiseSettings = MutableStateFlow(MeasurementSettings.getDefaultInstance())
-    val noiseSettings = _noiseSettings.asStateFlow()
+    val noiseSettings =  userSettings.data.map { it.noiseSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettingsPopulatedDefaultInstance())
 
-    private val _wifiSettings = MutableStateFlow(MeasurementSettings.getDefaultInstance())
-    val wifiSettings = _wifiSettings.asStateFlow()
+    val wifiSettings =  userSettings.data.map { it.wifiSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettingsPopulatedDefaultInstance())
+
+    override fun onCleared() {
+        consoledebug("the Settings Screen ViewModel is now cleared")
+        super.onCleared()
+    }
 }

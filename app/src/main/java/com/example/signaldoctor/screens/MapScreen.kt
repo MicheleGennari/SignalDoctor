@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.signaldoctor.NetworkMode
@@ -81,7 +82,7 @@ import org.osmdroid.views.MapView
 @Composable
 fun MapScreen(
     modifier: Modifier = Modifier,
-    viewModel: MyViewModel,
+    viewModel: MyViewModel = hiltViewModel(),
     navigateToSettings : () -> Unit = {}
     ){
     SignalDoctorTheme {
@@ -95,6 +96,7 @@ fun MapScreen(
                 false -> consoledebug("Permission DENIED")
             }
         }
+
 
         LaunchedEffect(locationPermission.status.isGranted){
             consoledebug("LocationUpdates effect launched by (re-)composition")
@@ -325,7 +327,7 @@ fun Map(
                 overlays.run {
 
                     if (locationPermission.status.isGranted && userLocation != null) {
-                        //consoledebug("add Marker")
+                        consoledebug("add Marker")
                         forEachIndexed { index, overlay ->
                             if (overlay is GpsMarker) removeAt(index)
                         }

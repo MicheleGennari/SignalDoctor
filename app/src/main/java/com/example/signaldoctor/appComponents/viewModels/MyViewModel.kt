@@ -166,6 +166,10 @@ open class MyViewModel @Inject constructor(
 
     fun locationUpdatesOn() {
 
+        locationUpdatesJob?.let { job ->
+            if(job.isActive) return
+        }
+
         locationUpdatesJob = viewModelScope.launch{
 
             locationProvider.requestLocationUpdates(locationUpdateSettings).onCompletion {
@@ -380,6 +384,7 @@ open class MyViewModel @Inject constructor(
     }
 
     init{
+        consoledebug("My ViewModel is Initialized")
 
         runBlocking{
 
@@ -413,7 +418,7 @@ open class MyViewModel @Inject constructor(
 
     @OptIn(DelicateCoroutinesApi::class)
     override fun onCleared() {
-        consoledebug("Clearing viewmodel....")
+        consoledebug("Clearing MyViewModel....")
         //msrsRepo.closeLocalDB()
         super.onCleared()
     }

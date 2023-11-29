@@ -22,15 +22,17 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.signaldoctor.appComponents.viewModels.MyViewModel
 import com.example.signaldoctor.ui.theme.SignalDoctorTheme
 import com.example.signaldoctor.R
+import com.example.signaldoctor.appComponents.viewModels.SettingsScreenVM
 import com.example.signaldoctor.contracts.Measure
 
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
-    viewModel: MyViewModel
+    viewModel: SettingsScreenVM = hiltViewModel()
 ){
     SignalDoctorTheme{
         Scaffold(
