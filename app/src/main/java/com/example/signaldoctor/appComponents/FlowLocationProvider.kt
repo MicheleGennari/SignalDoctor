@@ -1,8 +1,6 @@
 package com.example.signaldoctor.appComponents
 
 import android.annotation.SuppressLint
-import android.app.Activity
-import android.content.Context
 import android.content.IntentSender
 import android.location.Location
 import android.os.Looper
@@ -23,7 +21,7 @@ const val CHANGE_LOCATION_SETTINGS = 42
 
 class FlowLocationProvider @Inject constructor(
     val provider: FusedLocationProviderClient,
-    val settingsClient : SettingsClient,
+    private val settingsClient : SettingsClient,
 ){
 
     @SuppressLint("MissingPermission")
@@ -56,7 +54,7 @@ class FlowLocationProvider @Inject constructor(
     }
 
      suspend fun checkLocationSettings(lr: LocationRequest, mainActivity: MainActivity) =
-        suspendCancellableCoroutine { continuation->
+         suspendCancellableCoroutine { continuation->
 
             settingsClient.checkLocationSettings(
                 LocationSettingsRequest.Builder().addLocationRequest(lr).build()
@@ -72,10 +70,9 @@ class FlowLocationProvider @Inject constructor(
 
 
     @SuppressLint("MissingPermission")
-    suspend fun getCurrentLocation(priority: @Priority Int) = suspendCancellableCoroutine<Location> {continuation->
+    suspend fun getCurrentLocation(priority: @Priority Int) = suspendCancellableCoroutine<Location?> {continuation->
 
         val cs = CancellationTokenSource()
-
         provider.getCurrentLocation(
             priority,
             cs.token
@@ -83,7 +80,7 @@ class FlowLocationProvider @Inject constructor(
             result-> continuation.resume(result)
         }.addOnFailureListener{ exception->
             exception.printStackTrace()
-            continuation.resumeWithException(exception)
+            continuation.resume(null)
         }
 
     }

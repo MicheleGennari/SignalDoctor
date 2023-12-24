@@ -1,23 +1,32 @@
 package com.example.signaldoctor.onlineDatabase
 
+import android.location.Location
 import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.Settings
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MsrsMap
+import com.example.signaldoctor.mapUtils.CoordConversions.tileIndexFromLocation
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.PhoneMeasurement
 import com.example.signaldoctor.room.SoundMeasurement
 import com.example.signaldoctor.room.WiFIMeasurement
 import com.example.signaldoctor.utils.Loggers
+import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.example.signaldoctor.workers.printAndReturn
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ktx.getValue
 import com.google.firebase.database.ktx.snapshots
+import com.google.firebase.database.ktx.values
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.osmdroid.views.MapView
+import java.util.Date
 import javax.inject.Inject
 import kotlin.coroutines.resume
 
@@ -31,39 +40,6 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
          private const val WIFI_TABLE_PATH = "$REALTIME_DB_ROOT_PATH/wifi"
     }
 
-/*
-     fun old_getMsrsAvgs(msrType: Measure): Flow<MsrsMap> = callbackFlow {
-
-        val path = db.reference.child("measurements/$msrType")
-        lateinit var listener: ValueEventListener
-
-        try{
-            listener = path.addValueEventListener(object : ValueEventListener{
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    consoledebug("uploading...")
-                    val msrsMap = MsrsMap()
-                    msrsMap.putAll(snapshot.children.associateBy(
-                        { mapTile -> mapTile.key!!},
-                        { mapTile -> mapTile.children.sumOf { measurement ->
-                            (measurement.value as Long).toInt()
-                        } / mapTile.childrenCount.toInt()
-                        }
-                    ) )
-                    trySendBlocking(msrsMap)
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    cancel(CancellationException("Realtime DB can't send average measurements"))
-                }
-
-            })
-            awaitCancellation()
-        }finally {
-            path.removeEventListener(listener)
-        }
-
-    }
-*/
     private fun List<MeasurementBase>.baseAvgsMap() : MsrsMap {
         val msrsMap = MsrsMap()
 
@@ -158,6 +134,37 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
     override fun getWifiMsrs(settings: MeasurementSettings): Flow<List<WiFIMeasurement>> {
         return getBaseMsrs(Measure.wifi, WiFIMeasurement::class.java, wifiMsrsFilter(settings))
     }
+
+    override fun countMeasurements(msrType : Measure, userLocation : Location, limitDate : Date) : Flow<Boolean> {
+
+        val currentTileIndex = MapView.getTileSystem().tileIndexFromLocation(userLocation)
+
+        return db.reference.child(
+            when (msrType) {
+
+                Measure.sound -> SOUND_TABLE_PATH
+                Measure.phone -> PHONE_TABLE_PATH
+                Measure.wifi -> WIFI_TABLE_PATH
+
+            }).orderByKey().startAt("$currentTileIndex").snapshots.flowOn(Dispatchers.IO).map { tileIndexesSnap ->
+                tileIndexesSnap.children.flatMap { tileIndexSnap ->
+                    tileIndexesSnap.children
+                }
+        }.map { measurementsSnap ->
+            measurementsSnap.mapNotNull { measurementSnap ->
+                consoledebug("prova funzionante")
+                printAndReturn("data snapshot",measurementSnap.value)
+                printAndReturn("RealtimeDB count msrs", measurementSnap.getValue<MeasurementBase>())
+            }.count { measurement ->
+
+                printAndReturn("RealtimeDB count msrs, this msr has date: ",measurement.date).after(
+                    printAndReturn("limitDate:", limitDate)
+                )
+            } <1
+        }.flowOn(Dispatchers.Default)
+    }
+
+
 
     override fun postPhoneMsr(phoneMeasurement: PhoneMeasurement): Boolean {
         val dbTileIndex = phoneMeasurement.firebaseTable.baseInfo.tileIndex

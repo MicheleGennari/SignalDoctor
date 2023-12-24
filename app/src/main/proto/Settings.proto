@@ -10,6 +10,8 @@ message MeasurementSettings{
   int32 msrsToTake = 2;
   int64 freshness = 3;
   int64 oldness = 4;
+  bool useMsrsToTake= 5;
+  bool isBackgroundMsrOn = 6;
 
 }
 

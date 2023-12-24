@@ -1,5 +1,6 @@
 package com.example.signaldoctor.contracts
 
+import android.location.Location
 import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.Settings
 import com.example.signaldoctor.room.MeasurementBase
@@ -8,6 +9,7 @@ import com.example.signaldoctor.room.SoundMeasurement
 import com.example.signaldoctor.room.WiFIMeasurement
 import com.example.signaldoctor.workers.MsrWorkersInputData
 import kotlinx.coroutines.flow.Flow
+import java.util.Date
 
 interface IMsrsDB {
 
@@ -19,7 +21,9 @@ interface IMsrsDB {
 
     fun getWifiMsrs(settings: MeasurementSettings) : Flow<List<WiFIMeasurement?>>
 
-     fun postPhoneMsr(phoneMeasurement: PhoneMeasurement) : Boolean
+    fun countMeasurements(msrType: Measure, userLocation : Location, limitDate : Date) : Flow<Boolean>
+
+    fun postPhoneMsr(phoneMeasurement: PhoneMeasurement) : Boolean
      fun postSoundMsr(soundMeasurement: SoundMeasurement) : Boolean
 
     fun postWifiMsr(wifiMeasurement: WiFIMeasurement) : Boolean

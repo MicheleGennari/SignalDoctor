@@ -1,5 +1,6 @@
 package com.example.signaldoctor.appComponents
 
+import android.content.IntentFilter
 import android.os.Bundle
 import android.preference.PreferenceManager
 import androidx.activity.ComponentActivity
@@ -15,6 +16,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
@@ -27,14 +29,24 @@ import androidx.navigation.navigation
 import com.example.signaldoctor.contracts.DestinationsInfo
 import com.example.signaldoctor.screens.MapScreen
 import com.example.signaldoctor.appComponents.viewModels.MyViewModel
+import com.example.signaldoctor.broadcastReceivers.RUN_MEASUREMENT_ACTION
+import com.example.signaldoctor.broadcastReceivers.RunMeasurementReceiver
 import com.example.signaldoctor.screens.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
 import org.osmdroid.config.Configuration.getInstance
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    private lateinit var runMeasurementReceiver : RunMeasurementReceiver
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+       /*  ContextCompat.registerReceiver(
+            this,
+            runMeasurementReceiver,
+            IntentFilter().apply { addAction(RUN_MEASUREMENT_ACTION) },
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )*/
         getInstance().load(applicationContext, PreferenceManager.getDefaultSharedPreferences(applicationContext))
         setContent {
 
@@ -94,13 +106,21 @@ class MainActivity : ComponentActivity() {
                         val viewModel : MyViewModel = hiltViewModel(mainGraph)
                         */
 
-                        SettingsScreen()
+                        SettingsScreen(
+                            onNavigationBack = {
+                                navController.navigate(DestinationsInfo.MapScreen.route)
+                            }
+                        )
                     }
             }
         }
 
     }
 
+    override fun onDestroy() {
+        unregisterReceiver(runMeasurementReceiver)
+        super.onDestroy()
+    }
 }
 
 fun AnimatedContentTransitionScope<NavBackStackEntry>.SettingsScreenEnterTransition() : EnterTransition? {

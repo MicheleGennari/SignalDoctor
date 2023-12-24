@@ -18,11 +18,14 @@ abstract class SoundMeasurementDAO : BaseMsrsDAO<SoundMeasurement>() {
     @Query("SELECT * FROM sound_table ORDER BY DATE")
     abstract fun getMsrs() : Flow<List<SoundMeasurement>>
 
+    @Query("SELECT COUNT(tile_index) FROM phone_table WHERE :currentTile <= tile_index AND date >= :oldness")
+    abstract fun countMeasures(currentTile : Long, oldness: Date) : Flow<Int>
+
     @MapInfo(keyColumn = TableColumn.tile_index, valueColumn = TableColumn.value)
-    @Query("SELECT * FROM sound_table"+
-            " WHERE date BETWEEN :freshness AND :oldness " +
-            "ORDER BY DATE LIMIT :x"
-    )
-    abstract fun getMsrsAvgs(x : Long = Long.MAX_VALUE, freshness : Date = Date(), oldness : Long = Long.MAX_VALUE) : Flow<Map<Long,Int>>
+    @Query("SELECT tile_index, AVG(value) AS value FROM sound_table " +
+            "WHERE date >= :oldness OR :oldness IS NULL AND date <= :freshness OR :freshness IS NULL " +
+            "GROUP BY tile_index " +
+            "ORDER BY date DESC LIMIT :msrsToTake")
+    abstract fun getMsrsAvgs(freshness : Date? = null, oldness : Date? = null, msrsToTake : Int? = Int.MAX_VALUE) : Flow<Map<Long,Int>>
 
 }

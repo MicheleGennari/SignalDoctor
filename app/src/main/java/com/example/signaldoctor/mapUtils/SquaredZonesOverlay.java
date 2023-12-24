@@ -160,6 +160,7 @@ public class SquaredZonesOverlay extends Overlay {
             super.initialiseLoop();
         }
 
+
         @Override
         public void handleTile(final long pMapTileIndex, int pX, int pY) {
 
@@ -196,6 +197,7 @@ public class SquaredZonesOverlay extends Overlay {
 
                 onTileReadyToDraw(mCanvas, mTileRect, mapTileAvg.get());
             }
+
             //onTileReadyToDraw(mCanvas, mTileRect, msrsMap.get("7_10_12"));
 
             if (Configuration.getInstance().isDebugTileProviders()) {

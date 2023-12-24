@@ -1,12 +1,16 @@
 <resources>
-    <string name="app_name"> SignalDoctor </string>
+    <string name="app_name"> Signal Doctor </string>
 
     <string name="measurements_channel_name">Measurements</string>
     <string name="measurement_channel_description">Notifications about measurements states,\nvalues and results.</string>
 
-    <string name="noise_measurement_notification_content_title">Measuring Noise...</string>
-    <string name="phone_measurement_notification_content_title">Measuring phone signal strength...\n</string>
-    <string name="wifi_measurement_notification_content_title">Measuring Wifi signal strength...</string>
-    <string name="post_measurement_content_title">Uploading Measurement...</string>
+    <string name="run_measurement_notification_title"> No %1$s measurement taken today</string>
+    <string name="run_measurement_notification_description">It\'s been a long time since you measured the current area. Do you want to run a measurement? </string>
+    <string name="run_measurement_notification_action"> Run measurement </string>
+
+    <string name="noise_measurement_notification_content_title">Measuring Noise…</string>
+    <string name="phone_measurement_notification_content_title">Measuring phone signal strength…\n</string>
+    <string name="wifi_measurement_notification_content_title">Measuring Wifi signal strength…</string>
+    <string name="post_measurement_content_title">Uploading Measurement…</string>
     <string name="tile_index_column">tile_index</string>
 </resources>

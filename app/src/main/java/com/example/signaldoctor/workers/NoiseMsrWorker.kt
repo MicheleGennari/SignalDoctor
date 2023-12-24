@@ -9,6 +9,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import androidx.datastore.core.DataStore
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.Data
@@ -18,18 +19,25 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
+import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.R
+import com.example.signaldoctor.appComponents.FlowLocationProvider
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.realtimeFirebase.SoundMeasurementFirebase
+import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.SoundMeasurement
 import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.google.android.gms.location.Priority
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import java.io.IOException
+import java.util.Date
+import java.util.UUID
 import java.util.regex.Pattern
 import kotlin.IllegalStateException
 import kotlin.reflect.KClass
@@ -43,6 +51,9 @@ const val REC_FILE_NAME = "temp_msr_recording.3gp"
 class NoiseMsrWorker @AssistedInject constructor(
     @Assisted ctx : Context,
     @Assisted params : WorkerParameters,
+    private val appSettings : DataStore<AppSettings>,
+    private val msrsRepo: MsrsRepo,
+    private val flowLocationProvider: FlowLocationProvider,
     private val gson : Gson
 ) : CoroutineWorker(ctx, params) {
 
@@ -89,7 +100,7 @@ class NoiseMsrWorker @AssistedInject constructor(
     }
 
 
-    suspend fun noiseWork(): Result {
+    private suspend fun noiseWork(): Result {
 
         return if (
             ActivityCompat.checkSelfPermission(
@@ -140,19 +151,24 @@ class NoiseMsrWorker @AssistedInject constructor(
                         matcher.group(1)?.toDoubleOrNull()?.toInt()?.let { msr ->
                             consoledebug("noise msr = $msr")
                             setProgress(workDataOf(Progress to 8/10f))
-                            Result.success(
-                                workDataOf(MeasurementBase.MSR_KEY to msr,
-                                    MeasurementBase.MSR_TYPE_KEY to gson.toJson(Measure.sound),
-                                    MEASUREMENT_KEY to gson.toJson(SoundMeasurement(
+
+                            if(
+                                msrsRepo.postSoundMsr(
+                                    SoundMeasurement(
                                         firebaseTable = SoundMeasurementFirebase(
-                                            MeasurementBase(
-                                                tileIndex = inputData.getValue(MeasurementBase.TILE_INDEX_KEY),
+                                            baseInfo = MeasurementBase(
+                                                tileIndex = flowLocationProvider.tileIndexFromLocation(Priority.PRIORITY_HIGH_ACCURACY) ?: return Result.retry(),
                                                 value = msr
                                             )
                                         )
-                                    ))
+                                    ),
+                                    appSettings.data.first().networkMode
                                 )
                             )
+                                Result.success(gson.workDataOfMsrWorkerResult(msr, Measure.sound))
+                            else
+                                Result.failure(gson.workDataOfMsrWorkerResult(msr, Measure.sound))
+
                         } ?: Result.failure()
                     } else Result.failure()
 

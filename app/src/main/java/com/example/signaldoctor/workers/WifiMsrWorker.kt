@@ -3,6 +3,7 @@ package com.example.signaldoctor.workers
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.ServiceInfo
+import android.location.Location
 import android.net.ConnectivityManager
 import android.net.ConnectivityManager.NetworkCallback
 import android.net.Network
@@ -14,18 +15,24 @@ import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import androidx.datastore.core.DataStore
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.ListenableWorker.*
 import androidx.work.workDataOf
+import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.R
+import com.example.signaldoctor.appComponents.FlowLocationProvider
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
+import com.example.signaldoctor.mapUtils.CoordConversions.tileIndexFromLocation
 import com.example.signaldoctor.realtimeFirebase.WifiMeasurementFirebase
+import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.WiFIMeasurement
 import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.google.android.gms.location.Priority
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -33,8 +40,12 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.osmdroid.views.MapView
 import java.io.IOException
+import java.util.Date
+import java.util.UUID
 import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -42,15 +53,19 @@ import kotlin.coroutines.resumeWithException
 class WifiMsrWorker @AssistedInject constructor(
     @Assisted ctx: Context,
     @Assisted params: WorkerParameters,
+    private val appSettings: DataStore<AppSettings>,
+    private val msrsRepo: MsrsRepo,
+    private val locationProvider: FlowLocationProvider,
     private val gson : Gson
     )
     : CoroutineWorker(ctx, params) {
 
     override suspend fun doWork(): Result {
+
         try{
             setForeground(getForegroundInfo())
         } catch (e : IllegalStateException) {
-            Log.e("WIFI MEASUREMENT WORKER ERROR", "Can't run as foreground services due to restrictions")
+            Log.e("WIFI MEASUREMENT WORKER ERROR", "Can't run as foreground service due to restrictions")
             e.printStackTrace()
         }
         return when{
@@ -97,23 +112,27 @@ class WifiMsrWorker @AssistedInject constructor(
                 setProgress(workDataOf(NoiseMsrWorker.Progress to i/10f))
             }
             msr /= 5
-            val outputData = workDataOf(
-                MeasurementBase.MSR_KEY to printAndReturn("wifi worker result: ",msr),
-                MeasurementBase.MSR_TYPE_KEY to gson.toJson(Measure.wifi),
-                 MEASUREMENT_KEY to gson.toJson(WiFIMeasurement(
-                    firebaseTable = WifiMeasurementFirebase(
-                        MeasurementBase(
-                            tileIndex = inputData.getValue(MeasurementBase.TILE_INDEX_KEY),
-                            value = msr
+
+            if(
+                    msrsRepo.postWifiMsr(
+                    measurement = WiFIMeasurement(
+                        firebaseTable = WifiMeasurementFirebase(
+                            baseInfo = MeasurementBase(
+                                tileIndex = locationProvider.tileIndexFromLocation(Priority.PRIORITY_HIGH_ACCURACY) ?: return Result.retry(),
+                                value= msr
+                            )
                         )
-                    )
-                ))
+                    ),
+                    appSettings.data.first().networkMode
                 )
-            return Result.success(outputData)
+            ){
+              Result.success(gson.workDataOfMsrWorkerResult(msr, Measure.wifi))
+            } else Result.failure(gson.workDataOfMsrWorkerResult(msr, Measure.wifi))
+
         } else Result.failure()
     }
 
-    suspend fun wifiWorkNewerBuilds(cm : ConnectivityManager) : Result {
+    private suspend fun wifiWorkNewerBuilds(cm : ConnectivityManager) : Result {
         var msr = 0
         for (i in 1..5){
             try{
@@ -124,19 +143,24 @@ class WifiMsrWorker @AssistedInject constructor(
             }
         }
         msr /= 5
-        val outputData = workDataOf(
-            MeasurementBase.MSR_KEY to printAndReturn("wifi worker result: ",msr),
-            MeasurementBase.MSR_TYPE_KEY to gson.toJson(Measure.wifi),
-            MEASUREMENT_KEY to gson.toJson(WiFIMeasurement(
-                firebaseTable = WifiMeasurementFirebase(
-                    MeasurementBase(
-                        tileIndex = inputData.getValue(MeasurementBase.TILE_INDEX_KEY),
-                        value = msr
+
+        return if(
+            msrsRepo.postWifiMsr(
+                WiFIMeasurement(
+                    firebaseTable = WifiMeasurementFirebase(
+                        MeasurementBase(
+                            tileIndex = locationProvider.tileIndexFromLocation(Priority.PRIORITY_HIGH_ACCURACY) ?: return Result.retry(),
+                            value = msr,
+                        )
                     )
-                )
-            ))
+                ),
+            appSettings.data.first().networkMode
+            )
         )
-        return Result.success(outputData)
+            Result.success(gson.workDataOfMsrWorkerResult(msr, Measure.wifi))
+        else
+            Result.failure(gson.workDataOfMsrWorkerResult(msr, Measure.wifi))
+
     }
 
 }
@@ -172,4 +196,9 @@ suspend fun wifiSignalStrength(cm : ConnectivityManager)  = suspendCancellableCo
         callback
     )
     continuation.invokeOnCancellation { cm.unregisterNetworkCallback(callback) }
+}
+
+
+suspend fun FlowLocationProvider.tileIndexFromLocation(priority: @Priority Int) = getCurrentLocation(priority)?.let { location ->
+    MapView.getTileSystem().tileIndexFromLocation(location)
 }

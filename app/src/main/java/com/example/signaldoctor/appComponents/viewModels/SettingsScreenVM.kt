@@ -1,39 +1,104 @@
 package com.example.signaldoctor.appComponents.viewModels
 
+import android.location.LocationRequest
 import androidx.datastore.core.DataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.MeasurementSettings
+import com.example.signaldoctor.appComponents.FlowLocationProvider
+import com.example.signaldoctor.appComponents.MainActivity
+import com.example.signaldoctor.contracts.Measure
+import com.example.signaldoctor.mapUtils.FlowGeocoder
+import com.example.signaldoctor.screens.msrTypeWHen
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.example.signaldoctor.utils.MeasurementSettingsPopulatedDefaultInstance
+import com.example.signaldoctor.utils.noiseSettings
+import com.example.signaldoctor.utils.phoneSettings
+import com.example.signaldoctor.utils.updateAppSettings
+import com.example.signaldoctor.utils.wifiSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class SettingsScreenVM @Inject constructor(
-    userSettings: DataStore<AppSettings>
+    private val userSettings: DataStore<AppSettings>,
+    private val locationProvider: FlowLocationProvider
 ) : ViewModel() {
 
-    init {
-        consoledebug("A Settings Screen ViewModel is now created")
+    val locationUpdateSettings = com.google.android.gms.location.LocationRequest.Builder(LOCATION_INTERVAL).setPriority(
+        LOCATION_PRIORITY
+    ).build()
+
+    private fun <T> DataStore<AppSettings>.settingStateFlow(sharingMode : SharingStarted = SharingStarted.WhileSubscribed(), initialValue : T, getter : AppSettings.() -> T) =
+        data.map { it.getter() }.flowOn(Dispatchers.IO).stateIn(viewModelScope, sharingMode, initialValue = initialValue)
+
+
+    val noiseSettings = userSettings.settingStateFlow(initialValue = MeasurementSettingsPopulatedDefaultInstance()){
+        noiseSettings
     }
 
-    val phoneSettings = userSettings.data.map { it.phoneSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettingsPopulatedDefaultInstance())
+    val phoneSettings = userSettings.settingStateFlow(initialValue = MeasurementSettingsPopulatedDefaultInstance()){
+        phoneSettings
+    }
 
-    val noiseSettings =  userSettings.data.map { it.noiseSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettingsPopulatedDefaultInstance())
+    val wifiSettings = userSettings.settingStateFlow(initialValue = MeasurementSettingsPopulatedDefaultInstance()){
+        wifiSettings
+    }
 
-    val wifiSettings =  userSettings.data.map { it.wifiSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettingsPopulatedDefaultInstance())
+    fun updateSettings(updater : AppSettings.Builder.() -> Unit){
+        viewModelScope.launch {
+            userSettings.updateData { oldSettingsSnap ->
+                oldSettingsSnap.updateAppSettings(updater)
+            }
+        }
+    }
+
+    fun updateMeasureSettings(msrType : Measure, updater : MeasurementSettings.Builder.() -> Unit) {
+        viewModelScope.launch {
+            userSettings.updateData { oldSettingsSnap ->
+                oldSettingsSnap.updateAppSettings {
+                    msrTypeWHen(
+                        msrType,
+                        phone = {
+                            phoneSettings(updater)
+                        },
+                        wifi = {
+                            wifiSettings(updater)
+                        },
+                        sound = {
+                            noiseSettings(updater)
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    fun updateNoiseSettings(updater: MeasurementSettings.Builder.() -> Unit){
+        updateMeasureSettings(msrType = Measure.sound, updater = updater)
+    }
+
+    fun updatePhoneSettings(updater: MeasurementSettings.Builder.() -> Unit){
+        updateMeasureSettings(msrType = Measure.phone, updater = updater)
+    }
+
+    fun updateWifiSettings(updater: MeasurementSettings.Builder.() -> Unit){
+        updateMeasureSettings(msrType = Measure.wifi, updater = updater)
+    }
 
     override fun onCleared() {
         consoledebug("the Settings Screen ViewModel is now cleared")
         super.onCleared()
+    }
+
+    init {
+        consoledebug("A Settings Screen ViewModel is now created")
     }
 }

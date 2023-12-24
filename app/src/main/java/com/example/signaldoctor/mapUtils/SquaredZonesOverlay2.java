@@ -74,7 +74,6 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
     /**
      * Current tile source
      */
-    protected final MapTileProviderBase mTileProvider;
 
     protected Drawable userSelectedLoadingDrawable = null;
     /* to avoid allocations during draw */
@@ -129,18 +128,13 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
      */
     private final TileStates mTileStates = new TileStates();
 
-    public SquaredZonesOverlay2(final MapTileProviderBase aTileProvider, final Context aContext, final MsrsMap avgMap, final Measure msrType) {
-        this(aTileProvider, aContext, true, true, avgMap, msrType);
+    public SquaredZonesOverlay2( final Context aContext, final MsrsMap avgMap, final Measure msrType) {
+        this( aContext, true, true, avgMap, msrType);
     }
 
-    public SquaredZonesOverlay2(final MapTileProviderBase aTileProvider, final Context aContext, boolean horizontalWrapEnabled, boolean verticalWrapEnabled, final MsrsMap avgsMap, final Measure msrType) {
+    public SquaredZonesOverlay2( final Context aContext, boolean horizontalWrapEnabled, boolean verticalWrapEnabled, final MsrsMap avgsMap, final Measure msrType) {
         super();
         this.ctx = aContext;
-        if (aTileProvider == null) {
-            throw new IllegalArgumentException(
-                    "You must pass a valid tile provider to the tiles overlay.");
-        }
-        this.mTileProvider = aTileProvider;
         setHorizontalWrapEnabled(horizontalWrapEnabled);
         setVerticalWrapEnabled(verticalWrapEnabled);
         setAvgsMap(avgsMap);
@@ -160,7 +154,6 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
 
     @Override
     public void onDetach(final MapView pMapView) {
-        this.mTileProvider.detach();
         ctx = null;
         BitmapPool.getInstance().asyncRecycle(mLoadingTile);
         mLoadingTile = null;
@@ -168,37 +161,13 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
         userSelectedLoadingDrawable = null;
     }
 
-    public int getMinimumZoomLevel() {
-        return mTileProvider.getMinimumZoomLevel();
-    }
-
-    public int getMaximumZoomLevel() {
-        return mTileProvider.getMaximumZoomLevel();
-    }
-
-    /**
-     * Whether to use the network connection if it's available.
-     */
-    public boolean useDataConnection() {
-        return mTileProvider.useDataConnection();
-    }
-
-    /**
-     * Set whether to use the network connection if it's available.
-     *
-     * @param aMode if true use the network connection if it's available. if false don't use the
-     *              network connection even if it's available.
-     */
-    public void setUseDataConnection(final boolean aMode) {
-        mTileProvider.setUseDataConnection(aMode);
-    }
 
     /**
      * Populates the tile provider's memory cache with the list of displayed tiles
      *
      * @since 6.0.0
      */
-    public void protectDisplayedTilesForCache(final Canvas pCanvas, final Projection pProjection) {
+   /* public void protectDisplayedTilesForCache(final Canvas pCanvas, final Projection pProjection) {
         if (!setViewPort(pCanvas, pProjection)) {
             return;
         }
@@ -207,7 +176,7 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
         mTileProvider.getTileCache().getMapTileArea().set(tileZoomLevel, mProtectedTiles);
         mTileProvider.getTileCache().maintenance();
     }
-
+*/
     /**
      * Get the area we are drawing to
      *
@@ -269,10 +238,6 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
         @Override
         public void initialiseLoop() {
             // make sure the cache is big enough for all the tiles
-            final int width = mTiles.right - mTiles.left + 1;
-            final int height = mTiles.bottom - mTiles.top + 1;
-            final int numNeeded = height * width;
-            mTileProvider.ensureCapacity(numNeeded + Configuration.getInstance().getCacheMapTileOvershoot());
             mTileStates.initialiseLoop();
             super.initialiseLoop();
         }
@@ -296,31 +261,11 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
         public void handleTile(final long pMapTileIndex, int pX, int pY) {
 
 
-
-
-            Drawable currentMapTile = mTileProvider.getMapTile(pMapTileIndex);
-            mTileStates.handleTile(currentMapTile);
             if (mCanvas == null) { // in case we just want to have the tiles downloaded, not displayed
                 return;
             }
-            boolean isReusable = currentMapTile instanceof ReusableBitmapDrawable;
-            final ReusableBitmapDrawable reusableBitmapDrawable =
-                    isReusable ? (ReusableBitmapDrawable) currentMapTile : null;
-            if (currentMapTile == null) {
-                currentMapTile = getLoadingTile();
-            }
 
-            if (currentMapTile != null) {
                 mProjection.getPixelFromTile(pX, pY, mTileRect);
-                if (isReusable) {
-                    reusableBitmapDrawable.beginUsingDrawable();
-                }
-                try {
-                    if (isReusable && !reusableBitmapDrawable.isBitmapValid()) {
-                        currentMapTile = getLoadingTile();
-                        isReusable = false;
-                    }
-
 
                     AtomicReference<Integer> mapTileAvg = new AtomicReference<>(null);
                     avgsMap.forEach( (key, avg )-> {
@@ -336,12 +281,8 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
                             }
                         }
                     });
-                        onTileReadyToDraw(mCanvas, currentMapTile, mTileRect, mapTileAvg.get());
-                } finally {
-                    if (isReusable)
-                        reusableBitmapDrawable.finishUsingDrawable();
-                }
-            }
+                        onTileReadyToDraw(mCanvas, mTileRect, mapTileAvg.get());
+
 
             if (Configuration.getInstance().isDebugTileProviders()) {
                 mProjection.getPixelFromTile(pX, pY, mTileRect);
@@ -382,10 +323,8 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
     }
 
 
-    protected void onTileReadyToDraw(final Canvas c, final Drawable currentMapTile, final Rect tileRect, final Integer avg) {
+    protected void onTileReadyToDraw(final Canvas c, final Rect tileRect, final Integer avg) {
 
-        currentMapTile.setColorFilter(currentColorFilter);
-        currentMapTile.setBounds(tileRect.left, tileRect.top, tileRect.right, tileRect.bottom);
         final Rect canvasRect = getCanvasRect();
         Paint msrPaint = new Paint();
         Paint gridPaint = new Paint();
@@ -550,7 +489,7 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
         }
     }
 
-    private Drawable getLoadingTile() {
+    /*private Drawable getLoadingTile() {
         if (userSelectedLoadingDrawable != null)
             return userSelectedLoadingDrawable;
         if (mLoadingTile == null && mLoadingBackgroundColor != Color.TRANSPARENT) {
@@ -579,7 +518,7 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
             }
         }
         return mLoadingTile;
-    }
+    } */
 
     private void clearLoadingTile() {
         final BitmapDrawable bitmapDrawable = mLoadingTile;

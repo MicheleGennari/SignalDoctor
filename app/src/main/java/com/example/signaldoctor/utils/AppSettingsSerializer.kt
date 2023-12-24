@@ -9,6 +9,10 @@ import com.example.signaldoctor.NetworkMode
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.temporal.ChronoField
+import java.util.Date
 
 class AppSettingsSerializer() : Serializer<AppSettings> {
 
@@ -36,7 +40,10 @@ class AppSettingsSerializer() : Serializer<AppSettings> {
 
 fun MeasurementSettingsPopulatedDefaultInstance() : MeasurementSettings {
     return MeasurementSettings.getDefaultInstance().toBuilder().apply {
-        msrsToTake = Int.MAX_VALUE
+        freshness = Date().time
+        oldness = Date().time - 86400
+        msrsToTake = 10
+        periodicity = 5
     }.build()
 }
 

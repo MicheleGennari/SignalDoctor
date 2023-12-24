@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.room.Room
+import androidx.work.WorkManager
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.contracts.FirebaseContracts
 import com.example.signaldoctor.localDatabase.IMsrsLocalDB
@@ -12,6 +13,9 @@ import com.example.signaldoctor.onlineDatabase.RealtimeDBImpl
 import com.example.signaldoctor.onlineDatabase.IMsrsOnlineDB
 import com.example.signaldoctor.room.MsrsDB
 import com.example.signaldoctor.utils.AppSettingsSerializer
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.SettingsClient
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ktx.database
 import com.google.firebase.ktx.Firebase
@@ -21,6 +25,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.android.scopes.ViewModelScoped
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Qualifier
 import javax.inject.Singleton
@@ -40,6 +45,14 @@ const val appSettingsDataStoreFileName = "AppSettings.pb"
 @Module
 @InstallIn(SingletonComponent::class)
 class ApplicationModules {
+
+
+
+    @Singleton
+    @Provides
+    fun provideWorkManager(@ApplicationContext ctx : Context) : WorkManager =
+        WorkManager.getInstance(ctx)
+
 
     @Singleton
     @Provides
@@ -83,7 +96,17 @@ class ApplicationModules {
             .build()
     }
 
+    @Singleton
+    @Provides
+    fun provideLocationProvider(@ApplicationContext ctx : Context) : FusedLocationProviderClient {
+        return LocationServices.getFusedLocationProviderClient(ctx)
+    }
 
+    @Singleton
+    @Provides
+    fun provideFusedLocationProviderSettingsClient(@ApplicationContext ctx: Context) : SettingsClient {
+        return LocationServices.getSettingsClient(ctx)
+    }
 
 }
 

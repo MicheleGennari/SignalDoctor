@@ -74,18 +74,6 @@ class ViewModelProvideModules {
 
     }
 
-    @ViewModelScoped
-    @Provides
-    fun provideLocationProvider(@ApplicationContext ctx : Context) : FusedLocationProviderClient{
-        return LocationServices.getFusedLocationProviderClient(ctx)
-    }
-
-    @ViewModelScoped
-    @Provides
-    fun provideFusedLocationProviderSettingsClient(@ApplicationContext ctx: Context) : SettingsClient {
-        return LocationServices.getSettingsClient(ctx)
-    }
-
 
     @ViewModelScoped
     @Provides
@@ -117,10 +105,6 @@ class ViewModelProvideModules {
     }
 */
 
-    @ViewModelScoped
-    @Provides
-    fun provideWorkManager(@ApplicationContext ctx : Context) : WorkManager =
-        WorkManager.getInstance(ctx)
 
 
     @ViewModelScoped

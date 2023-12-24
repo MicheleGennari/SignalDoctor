@@ -7,34 +7,38 @@ import android.os.Build
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.content.getSystemService
+import androidx.datastore.core.DataStore
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ForegroundInfo
-import androidx.work.ListenableWorker.*
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.R
+import com.example.signaldoctor.appComponents.FlowLocationProvider
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.realtimeFirebase.PhoneMeasurementFirebase
-import com.example.signaldoctor.realtimeFirebase.WifiMeasurementFirebase
+import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.PhoneMeasurement
-import com.example.signaldoctor.room.WiFIMeasurement
 import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.google.android.gms.location.Priority
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.delay
-import javax.inject.Inject
+import kotlinx.coroutines.flow.first
 
 @HiltWorker
 class PhoneMsrWorker @AssistedInject constructor(
     @Assisted private val ctx : Context,
     @Assisted private val params : WorkerParameters,
-    private val gson : Gson
+    private val appSettings: DataStore<AppSettings>,
+    private val msrsRepo: MsrsRepo,
+    private val flowLocationProvider : FlowLocationProvider,
+    private val gson: Gson
 ) :CoroutineWorker(ctx, params) {
 
 
@@ -90,24 +94,30 @@ class PhoneMsrWorker @AssistedInject constructor(
         }
         msr /= 5
         consoledebug("$msr")
-        val outputData = Data.Builder()
-            .putInt(MeasurementBase.MSR_KEY, msr)
-            .putString(MeasurementBase.MSR_TYPE_KEY, gson.toJson(Measure.phone))
-            .putString(MEASUREMENT_KEY,
-                gson.toJson(PhoneMeasurement(
+        return if(
+            msrsRepo.postPhoneMsr(
+                PhoneMeasurement(
                     firebaseTable = PhoneMeasurementFirebase(
-                        isLTE = false,
                         baseInfo = MeasurementBase(
-                            tileIndex = inputData.getValue(MeasurementBase.TILE_INDEX_KEY),
+                            tileIndex = flowLocationProvider.tileIndexFromLocation(Priority.PRIORITY_HIGH_ACCURACY) ?: return Result.retry(),
                             value = msr
                         )
                     )
-                ))
-                )
-            .build()
-        Log.i("PHONE MSR WORKER", "output data is ${if(outputData == Data.EMPTY) "empty" else "filled"}")
-        return Result.success(outputData)
+                ),
+                appSettings.data.first().networkMode
+            )
+        ) Result.success(
+            gson.workDataOfMsrWorkerResult(msr, Measure.phone)
+        )
+        else Result.failure(gson.workDataOfMsrWorkerResult(msr, Measure.phone))
+
     }
     
 }
 
+fun Gson.workDataOfMsrWorkerResult(msr : Int, msrType : Measure) : Data{
+    return workDataOf(
+        MeasurementBase.MSR_KEY to msr,
+        MeasurementBase.MSR_TYPE_KEY to toJson(msrType)
+    )
+}

@@ -18,6 +18,9 @@ abstract class PhoneMeasurementDAO : BaseMsrsDAO<PhoneMeasurement>() {
     @Query("SELECT * FROM phone_table ORDER BY DATE")
     abstract fun getMsrs() : Flow<List<PhoneMeasurement>>
 
+    @Query("SELECT COUNT(tile_index) FROM phone_table WHERE :currentTile <= tile_index AND date > :limitDate")
+    abstract fun countMeasures(currentTile : Long, limitDate: Date) : Flow<Int>
+
     @MapInfo(keyColumn = TableColumn.tile_index, valueColumn = TableColumn.value)
     @Query("SELECT tile_index, AVG(value) AS value FROM phone_table " +
             "WHERE date >= :oldness OR :oldness IS NULL AND date <= :freshness OR :freshness IS NULL " +

@@ -1,14 +1,19 @@
 package com.example.signaldoctor.screens
 
 import android.location.Location
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntSizeAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandIn
 import androidx.compose.animation.shrinkOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -20,28 +25,43 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DockedSearchBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LeadingIconTab
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarData
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarVisuals
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -54,12 +74,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.CHANGE_LOCATION_SETTINGS
 import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.appComponents.viewModels.MyViewModel
+import com.example.signaldoctor.broadcastReceivers.RunMeasurementReceiver
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
 import com.example.signaldoctor.contracts.MsrsMap
@@ -73,8 +95,7 @@ import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.android.gms.common.api.ResolvableApiException
-import org.osmdroid.tileprovider.MapTileProviderBasic
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import com.google.android.gms.location.LocationServices
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 
@@ -87,11 +108,12 @@ fun MapScreen(
     ){
     SignalDoctorTheme {
 
+        val isInternetAvailable by viewModel.isNetworkAvailable.collectAsStateWithLifecycle()
         val locationPermission = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION){ isGranted ->
             when(isGranted) {
                 true -> {
                     consoledebug("Permission GRANTED")
-                    //viewModel.locationUpdatesOn()
+                    viewModel.locationUpdatesOn()
                 }
                 false -> consoledebug("Permission DENIED")
             }
@@ -114,7 +136,25 @@ fun MapScreen(
             }
         }
         val screenLocation by viewModel.mapScreenUiState.screenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
-        val userLocation by viewModel.userLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED )
+        val userLocation by viewModel.userLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED )
+
+        val arePhoneMsrsDated by viewModel.arePhoneMsrsDated.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED)
+        LaunchedEffect(arePhoneMsrsDated){
+            if (arePhoneMsrsDated) viewModel.sendRunMeasurementNotification(Measure.phone)
+            else viewModel.cancelRunMeasurementNotification(Measure.phone)
+        }
+        val areNoiseMsrsDated by viewModel.areNoiseMsrsDated.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED)
+        LaunchedEffect(areNoiseMsrsDated, recordPermission){
+            if (areNoiseMsrsDated && recordPermission.status.isGranted)
+                viewModel.sendRunMeasurementNotification(Measure.sound)
+            else
+                viewModel.cancelRunMeasurementNotification(Measure.sound)
+        }
+        val areWifiMsrsDated by viewModel.areWifiMsrsDated.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED)
+        LaunchedEffect(areWifiMsrsDated){
+            if (areWifiMsrsDated) viewModel.sendRunMeasurementNotification(Measure.wifi)
+            else viewModel.cancelRunMeasurementNotification(Measure.wifi)
+        }
 
         val searchBarText by viewModel.mapScreenUiState.searchBarText.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
         val centerOnScreenLocation by viewModel.mapScreenUiState.centerOnScreenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
@@ -131,6 +171,15 @@ fun MapScreen(
         val wifiAvgs by viewModel.wifiAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
 
         val currentMeasuringState by viewModel.mapScreenUiState.measuringState.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+
+        val snackbarHostState = remember{SnackbarHostState()}
+
+        StatusSnackBarsLauncher(
+            snackBarHostState = remember{SnackbarHostState()},
+        )
+
+
+
 
         Scaffold(
             topBar = {
@@ -149,9 +198,21 @@ fun MapScreen(
                         onSearch = { query -> viewModel.setScreenLocationFromQueryString(query) }
                     )
 
+                    Divider(
+                        modifier = Modifier.alpha(0f),
+                        thickness = 12.dp
+                    )
+
                     NetworkModeToggleButton(
+                        modifier= Modifier,
                         checked = currentNetworkMode == NetworkMode.ONLINE,
-                        onCheckedChange = { viewModel.switchNetworkMode() }
+                        onCheckedChange = {
+                            if( !(
+                                    currentNetworkMode == NetworkMode.OFFLINE
+                                    && !isInternetAvailable
+                            ))
+                                viewModel.switchNetworkMode()
+                        }
                     )
                 }
             },
@@ -171,12 +232,11 @@ fun MapScreen(
                     updateSearchBarText = {viewModel.mapScreenUiState.updateSearchBarText(it) }
                 )
 
-            },
 
+            },
             floatingActionButton = {
 
             },
-
             bottomBar = {
 
                 Column(
@@ -234,9 +294,9 @@ fun MapScreen(
                                         //viewModel.changeMeasuringState(MeasuringState.STOP)
                                     }
 
-                                    MeasuringState.BACKGROUND -> viewModel.changeMeasuringState(
-                                        MeasuringState.STOP
-                                    )
+                                    MeasuringState.BACKGROUND -> {
+                                        viewModel.cancelBackgroundMeasurement(currentMsrType)
+                                    }
                                 }
                             }
                         )
@@ -256,6 +316,12 @@ fun MapScreen(
                         noiseMsr = lastNoiseMsr,
                         wifiMsr = lastWifiMsr
                     )
+                }
+            },
+            snackbarHost = {
+
+                SnackbarHost(hostState = snackbarHostState) {
+                    Snackbar(snackbarData = it)
                 }
             }
         )
@@ -305,7 +371,7 @@ fun Map(
                             )
                         })
                     }
-                    for (mode in Measure.values()) add(mode.ordinal, SquaredZonesOverlay2(MapTileProviderBasic(ctx, TileSourceFactory.MAPNIK), ctx,
+                    for (mode in Measure.values()) add(mode.ordinal, SquaredZonesOverlay2( ctx,
                         when(mode){
                             Measure.sound -> soundAvgs
                             Measure.phone -> phoneAvgs
@@ -327,7 +393,7 @@ fun Map(
                 overlays.run {
 
                     if (locationPermission.status.isGranted && userLocation != null) {
-                        consoledebug("add Marker")
+                        //consoledebug("add Marker")
                         forEachIndexed { index, overlay ->
                             if (overlay is GpsMarker) removeAt(index)
                         }
@@ -461,11 +527,18 @@ fun NetworkModeToggleButton(
     onCheckedChange : (Boolean) -> Unit = {},
 
 ){
-    Switch(
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        enabled = true
-    )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = true,
+            thumbContent = {
+                Icon(
+                    modifier = Modifier.size(SwitchDefaults.IconSize),
+                    painter = painterResource(id = R.drawable.nework_mode),
+                    contentDescription = "Network Mode Switch"
+                )
+            }
+        )
 }
 
 @Composable
@@ -498,7 +571,9 @@ fun MeasuringButton(
     onClick: () -> Unit = {},
     fabInteractions : MutableInteractionSource = remember{MutableInteractionSource()} ,
     measuringState: MeasuringState = MeasuringState.STOP,
-    measurementProgress : Float = 5/10f
+    measurementProgress : Float = 5/10f,
+
+
 ){
 
     val isPressed by fabInteractions.collectIsPressedAsState()
@@ -506,6 +581,7 @@ fun MeasuringButton(
         animationSpec = spring(Spring.DampingRatioLowBouncy),
         label = "pressedMeasuringButton Animation"
     )
+
 
     ExtendedFloatingActionButton(
         modifier = modifier
@@ -566,44 +642,6 @@ fun MeasuringButton(
                         )
                     }
                 }
-           /* when (measuringState) {
-
-                    MeasuringState.STOP -> {
-                        Icon(
-                            modifier = Modifier.padding(20.dp),
-                                //.padding(top = 20.dp, bottom = 20.dp, start = 6.dp, end = 6.dp)
-                                //.offset(10.dp),
-                            painter = painterResource(
-                                id = R.drawable.play_icon
-                            ), contentDescription = "Measuring Button"
-                        )
-                    }
-                    MeasuringState.BACKGROUND -> CircularProgressIndicator()
-                    MeasuringState.RUNNING -> {
-                        Box(
-                           contentAlignment = Alignment.Center
-                        ) {
-                            
-                            CircularProgressIndicator(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(10.dp),
-                                progress = measurementProgress
-                            )
-                        }
-                        /*
-                        Icon(
-                            modifier = Modifier
-                                .offset(2.dp)
-                                .padding(4.dp),
-                            painter = painterResource(
-                                id = R.drawable.stop_icon
-                            ), contentDescription = "Measuring Button"
-                        )
-                        */
-                    }
-                }*/
-
            }
     )
 }
@@ -644,13 +682,15 @@ fun MsrsBar(
     changeCurrentMsrMode : (Measure) -> Unit = {},
 ){
     TabRow(
+        modifier = modifier,
         selectedTabIndex = currentMsrType.ordinal,
     ) {
         for(tabMsrType in Measure.values()) {
             MsrTab(
+                modifier = Modifier.padding(top = 10.dp),
                 selected = if (tabMsrType == currentMsrType) true else false,
                 msrName = tabMsrType.name,
-                msr = when(tabMsrType) {
+                lastMsr = when(tabMsrType) {
                                        Measure.sound -> noiseMsr
                                         Measure.phone -> phoneMsr
                                         Measure.wifi -> wifiMsr
@@ -664,30 +704,40 @@ fun MsrsBar(
 @Composable
 @Preview("singe Measure Tab")
 fun MsrTab(
+    modifier: Modifier = Modifier,
     selected : Boolean = true,
     msrName : String = "Phone",
-    msr : Int? = 0,
+    lastMsr : Int? = 0,
     onClick : () -> Unit = {}
 ){
+    
+
     Tab(
+        modifier = modifier,
         selected = selected ,
         unselectedContentColor = MaterialTheme.colorScheme.primary,
         text = {
-                    Column {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Text(text = msrName)
-                        Text(text = msr?.let { "${msr}dBm" } ?: "--")
-                    }
+                        AnimatedVisibility(visible = lastMsr != null) {
+                        Text(text = "$lastMsr dBm")
+                        //Text(text = msr?.let { "${msr}dBm" } ?: "--")
+                            }
+                        }
                },
 
         icon = {
+
                 Icon(
                     modifier= Modifier.height(54.dp),
                     painter =  when(msrName) {
                                             Measure.sound.name -> painterResource(id = R.drawable.ear)
                                             Measure.phone.name -> painterResource(id = R.drawable.phone)
                                             Measure.wifi.name -> painterResource(id = R.drawable.wifi)
-                                            else -> painterResource(id = R.drawable.ic_launcher_foreground)}
-                                            ,
+                                            else -> painterResource(id = R.drawable.ic_launcher_foreground)
+                    },
                     contentDescription = "$msrName Tab"
                     )
                },
@@ -696,3 +746,14 @@ fun MsrTab(
     )
 }
 
+@Composable
+fun StatusSnackBarsLauncher(
+    snackBarHostState : SnackbarHostState,
+    vararg snackBars : SnackbarVisuals
+){
+    LaunchedEffect(snackBars){
+        for (snackBar in snackBars){
+            snackBarHostState.showSnackbar(snackBar)
+        }
+    }
+}

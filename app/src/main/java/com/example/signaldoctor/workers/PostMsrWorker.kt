@@ -12,6 +12,7 @@ import androidx.work.Logger
 import androidx.work.WorkerParameters
 import androidx.work.hasKeyWithValueOfType
 import androidx.work.workDataOf
+import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
@@ -21,12 +22,15 @@ import com.example.signaldoctor.room.PhoneMeasurement
 import com.example.signaldoctor.room.SoundMeasurement
 import com.example.signaldoctor.room.TableColumn
 import com.example.signaldoctor.room.WiFIMeasurement
+import com.example.signaldoctor.screens.msrTypeWHen
 import com.example.signaldoctor.utils.Loggers
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.example.signaldoctor.utils.Loggers.hashCode
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 const val POST_MSR_NOTIFICATION_ID = 2
@@ -36,9 +40,9 @@ class PostMsrWorker  @AssistedInject constructor(
      @Assisted  ctx: Context,
      @Assisted params: WorkerParameters,
      private val msrsRepo: MsrsRepo,
-     private val gson : Gson
-     ) :
-    CoroutineWorker(ctx, params) {
+     private val gson : Gson,
+     private val appSettings : Flow<AppSettings>
+     ) : CoroutineWorker(ctx, params) {
 
     override suspend fun doWork(): Result {
 
@@ -68,11 +72,12 @@ class PostMsrWorker  @AssistedInject constructor(
     }
     private fun failureMsrWorkData(msr : Int) = Result.failure(workDataOf(MeasurementBase.MSR_KEY to msr))
 
-    private fun postMsrWork(msrType : Measure, dataJson : String) : Boolean {
+    private suspend fun postMsrWork(msrType : Measure, dataJson : String) : Boolean {
+
         return when(msrType){
-            Measure.phone -> msrsRepo.postPhoneMsr(gson.fromJson(dataJson, PhoneMeasurement::class.java))
-            Measure.sound-> msrsRepo.postSoundMsr(gson.fromJson(dataJson, SoundMeasurement::class.java))
-            Measure.wifi -> msrsRepo.postWifiMsr(gson.fromJson(dataJson, WiFIMeasurement::class.java))
+            Measure.phone -> msrsRepo.postPhoneMsr(gson.fromJson(dataJson, PhoneMeasurement::class.java), appSettings.first().networkMode)
+            Measure.sound-> msrsRepo.postSoundMsr(gson.fromJson(dataJson, SoundMeasurement::class.java), appSettings.first().networkMode)
+            Measure.wifi -> msrsRepo.postWifiMsr(gson.fromJson(dataJson, WiFIMeasurement::class.java), appSettings.first().networkMode)
         }
     }
 
@@ -94,4 +99,5 @@ class PostMsrWorker  @AssistedInject constructor(
             workerNotification,
         )
     }
+
 }

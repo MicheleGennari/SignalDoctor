@@ -1,6 +1,8 @@
 package com.example.signaldoctor.repositories
 
+import android.location.Location
 import com.example.signaldoctor.MeasurementSettings
+import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.Settings
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MsrsMap
@@ -14,7 +16,9 @@ import com.example.signaldoctor.room.WiFIMeasurement
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import java.lang.IllegalStateException
+import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -62,16 +66,36 @@ class MsrsRepo @Inject constructor(
     fun getWifiOnlineAvgs(settings: MeasurementSettings) = onlineDB.avgsMap(Measure.wifi, settings)
 
 
-    fun postPhoneMsr(measurement : PhoneMeasurement) = onlineDB.postPhoneMsr(measurement) && localDB.postPhoneMsr(measurement)
-    fun postSoundMsr(measurement: SoundMeasurement) = onlineDB.postSoundMsr(measurement) && localDB.postSoundMsr(measurement)
-    fun postWifiMsr(measurement: WiFIMeasurement) = onlineDB.postWifiMsr(measurement) && localDB.postWifiMsr(measurement)
+    fun countLocalMeasurements(msrType : Measure, userLocation : Location, limitDate: Date) : Flow<Boolean>{
+        return localDB.countMeasurements(msrType, userLocation, limitDate)
+    }
 
-    fun <T> postMsr( measurement : T) =  when(measurement){
+    fun countMergedMeasurements(msrType: Measure, userLocation : Location, limitDate: Date) : Flow<Boolean>{
+        return countLocalMeasurements(msrType, userLocation, limitDate)
+            .combine(onlineDB.countMeasurements(msrType, userLocation, limitDate)) { areLocalMsrsDated, areOnlineMsrsDated ->
+                //consoledebug("areLocalMsrsDated? $areLocalMsrsDated")
+                //consoledebug("areOnlineMsrsDated? $areOnlineMsrsDated")
+                areLocalMsrsDated && areOnlineMsrsDated
+            }
+    }
+
+    fun postPhoneMsr(measurement : PhoneMeasurement, networkMode: NetworkMode) =
+        (if(networkMode == NetworkMode.ONLINE) onlineDB.postPhoneMsr(measurement) else true)
+                && localDB.postPhoneMsr(measurement)
+    fun postSoundMsr(measurement: SoundMeasurement, networkMode: NetworkMode) =
+        (if(networkMode == NetworkMode.ONLINE) onlineDB.postSoundMsr(measurement) else true)
+                && localDB.postSoundMsr(measurement)
+    fun postWifiMsr(measurement: WiFIMeasurement, networkMode: NetworkMode) =
+        (if(networkMode == NetworkMode.ONLINE) onlineDB.postWifiMsr(measurement) else true)
+                && localDB.postWifiMsr(measurement)
+
+
+   /* fun <T> postMsr( measurement : T) =  when(measurement){
              is PhoneMeasurement -> postPhoneMsr(measurement)
              is SoundMeasurement -> postSoundMsr(measurement)
              is WiFIMeasurement -> postWifiMsr(measurement)
             else -> throw IllegalStateException("parameter of postMsr() is not of the ones you can upload to the server")
-        }
+        }*/
 
     fun closeLocalDB() {
         //FOR DEBUG PURPOSES, CANCEL THIS LINE FOR PRODUCTION!!!
