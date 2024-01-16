@@ -1,15 +1,13 @@
 package com.example.signaldoctor.appComponents.viewModels
 
-import android.location.Geocoder
 import android.location.Location
 import android.util.Log
-import android.util.Patterns
-import androidx.annotation.FloatRange
 import androidx.datastore.core.DataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkInfo
 import com.example.signaldoctor.AppSettings
+import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.appComponents.FlowConnectivityManager
 import com.example.signaldoctor.appComponents.FlowLocationProvider
@@ -20,18 +18,19 @@ import com.example.signaldoctor.appComponents.ReceiversManager
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
 import com.example.signaldoctor.contracts.MsrsMap
+import com.example.signaldoctor.hiltModules.AndroidGeocoder
 import com.example.signaldoctor.mapUtils.CoordConversions.tileIndexFromLocation
-import com.example.signaldoctor.mapUtils.FlowGeocoder
+import com.example.signaldoctor.mapUtils.IFlowGeocoder
 import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.screens.msrTypeWhen
+import com.example.signaldoctor.searchBarHint.ISearchBarHint
 import com.example.signaldoctor.uistates.MapScreenUiState
 import com.example.signaldoctor.utils.AppNotificationManager
 import com.example.signaldoctor.utils.Loggers.consoledebug
-import com.example.signaldoctor.utils.MeasurementSettingsPopulatedDefaultInstance
 import com.example.signaldoctor.utils.not
+import com.example.signaldoctor.utils.updateAppSettings
 import com.example.signaldoctor.workers.NoiseMsrWorker
-import com.example.signaldoctor.workers.printAndReturn
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.Priority
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -54,14 +53,14 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.withIndex
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.osmdroid.views.MapView
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
 import java.util.Date
-import java.util.regex.Pattern
 import javax.inject.Inject
 
 const val POST_MSR_WORK_TAG = "postMsrWOrkTag"
@@ -87,17 +86,20 @@ open class MyViewModel @Inject constructor(
     connectivityManager: FlowConnectivityManager,
     private val receiversManager: ReceiversManager,
     private val permissionsChecker: PermissionsChecker,
-    private val geocoder: FlowGeocoder
+    @AndroidGeocoder private val geocoder: IFlowGeocoder
 ) : ViewModel() {
 
 
-    val networkMode = settingsDataStore.data.flowOn(Dispatchers.IO).map { it.networkMode }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), NetworkMode.OFFLINE)
+    val networkMode = settingsDataStore.data.flowOn(Dispatchers.IO).map { it.networkMode }.distinctUntilChanged().withIndex().flowOn(Dispatchers.Default).onEach {
+        if(it.index>0)
+            notificationManager.launchToast(message = "switched to ${it.value.name} mode")
+    }.flowOn(Dispatchers.Main).map{it.value}.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), NetworkMode.OFFLINE)
 
-    val phoneSettings = settingsDataStore.data.flowOn(Dispatchers.IO).map { it.phoneSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettingsPopulatedDefaultInstance())
+    //val phoneSettings = settingsDataStore.data.flowOn(Dispatchers.IO).map { it.phoneSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettings.getDefaultInstance())
 
-    val noiseSettings = settingsDataStore.data.flowOn(Dispatchers.IO).map { it.noiseSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettingsPopulatedDefaultInstance())
+    //val noiseSettings = settingsDataStore.data.flowOn(Dispatchers.IO).map { it.noiseSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettings.getDefaultInstance())
 
-    val wifiSettings = settingsDataStore.data.flowOn(Dispatchers.IO).map { it.wifiSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettingsPopulatedDefaultInstance())
+    //val wifiSettings = settingsDataStore.data.flowOn(Dispatchers.IO).map { it.wifiSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettings.getDefaultInstance())
 
     val isNoiseBackgroundOn = backgroundMeasurementsManager(Measure.sound)
 
@@ -106,13 +108,15 @@ open class MyViewModel @Inject constructor(
     val isWifiBackgroundOn = backgroundMeasurementsManager(Measure.wifi)
 
     private fun backgroundMeasurementsManager(msrType: Measure) = combine(
+        //flow #1 of combine
         settingsDataStore.data.flowOn(Dispatchers.IO).map {
             msrTypeWhen(msrType,
                 phone = it.phoneSettings,
-                sound = it.noiseSettings.takeIf { printAndReturn("recording is : ",permissionsChecker.isRecordingGranted()) },
+                sound = it.noiseSettings.takeIf { permissionsChecker.isRecordingGranted() },
                 wifi = it.wifiSettings
                 )?.isBackgroundMsrOn ?: false
         }.flowOn(Dispatchers.IO).distinctUntilChanged(),
+        //flow #2 of combine
         settingsDataStore.data.flowOn(Dispatchers.IO).map {
             msrTypeWhen(msrType,
                 phone = it.phoneSettings,
@@ -123,22 +127,23 @@ open class MyViewModel @Inject constructor(
     ){ isBackgroundOn, periodicity ->
 
         if (isBackgroundOn) {
-            consoledebug("background activated")
+            consoledebug("background ${msrType.name} activated")
             runBackgroundMeasurement(msrType, Duration.ofMinutes(periodicity.toLong()))
-        } else
+        } else {
+            consoledebug("no ${msrType.name} background measurement")
             cancelBackgroundMeasurement(msrType)
-
+        }
         isBackgroundOn
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
     private fun setLastLocationUserSettings(newLocation : Location) {
 
         viewModelScope.launch(Dispatchers.IO) {
             try{
                 settingsDataStore.updateData { settingsSnap ->
-                    settingsSnap.toBuilder()
-                        .setLastLocationLat(newLocation.latitude)
-                        .setLastLocationLon(newLocation.longitude)
-                        .build()
+                    settingsSnap.updateAppSettings {
+                        lastLocationLat = newLocation.latitude
+                        lastLocationLon = newLocation.longitude
+                    }
                 }
             }catch (e : IOException){
                 Log.e("AppSettings DataStore", "IO Exception while writing last location coordinates")
@@ -188,7 +193,26 @@ open class MyViewModel @Inject constructor(
 
     private val _userLocation : MutableStateFlow<Location?> = MutableStateFlow(null)
     val userLocation = _userLocation.asStateFlow()
+
+    val localSearchBarHints = mapScreenUiState.localSearchBarHints.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+    val searchBarHints = mapScreenUiState.searchBarHints.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+
+
+    /*
+    val searchBarHints = mapScreenUiState.searchBarQuery.onEach {
+            mapScreenUiState.setIsSearchBarLoading(true)
+    }.flowOn(Dispatchers.Default).debounce(Duration.ofSeconds(1)).map{ query ->
+        geocoder.getAddressesFromLocationName(query).also {
+            consoledebug("a geocoder call has been completed")
+        }
+    }.flowOn(Dispatchers.IO).onEach {
+        mapScreenUiState.setIsSearchBarLoading(false)
+    }.filterNotNull()
+        .stateIn(viewModelScope, started = SharingStarted.WhileSubscribed(), initialValue = listOf())
+    */
+
     private var locationUpdatesJob : Job? = null
+    fun areLocationUpdatesOn() = locationUpdatesJob?.job?.isActive ?: false
 
     val arePhoneMsrsDated = areMsrsDated(Measure.phone)
     val areNoiseMsrsDated = areMsrsDated(Measure.sound)
@@ -266,14 +290,27 @@ open class MyViewModel @Inject constructor(
         initialValue = false
     )
 
+    fun getLocationNameFromUserLocation() {
+        userLocation.value?.let { location ->
+            viewModelScope.launch(Dispatchers.IO) {
+                geocoder.getAddressesFromLocation(location).firstOrNull()?.run {
+
+                    mapScreenUiState.updateSearchBarQuery(getAddressLine(0))
+
+                } ?: mapScreenUiState.updateSearchBarQuery("${location.latitude},${location.longitude}")
+            }
+        }
+    }
+
     fun switchNetworkMode() {
 
         consoledebug("${isNetworkAvailable.value}")
         viewModelScope.launch(Dispatchers.IO){
+
             settingsDataStore.updateData { settingsSnap ->
-                settingsSnap.toBuilder()
-                    .setNetworkMode(!settingsSnap.networkMode)
-                    .build()
+                settingsSnap.updateAppSettings {
+                    networkMode = !networkMode
+                }
             }
         }.invokeOnCompletion { e ->
             e?.printStackTrace()
@@ -282,47 +319,13 @@ open class MyViewModel @Inject constructor(
     }
 
 
-    fun changeScreenLocation(
-        @FloatRange(from = -90.0, to = 90.0) latitude: Double,
-        @FloatRange(from = -180.0, to = 180.0) longitude: Double
-    ) {
-        mapScreenUiState.changeScreenLocation(latitude, longitude)
-    }
-
-    fun setUserLocationAsScreenLocation() {
-        consoledebug("init:"+userLocation.value?.latitude.toString())
-        userLocation.value?.run {
-            mapScreenUiState.changeScreenLocation(latitude, longitude)
-            centerOnScreenLocation()
+    fun addLocalHint(hint : ISearchBarHint){
+        viewModelScope.launch {
+            consoledebug("inside add local hint")
+            mapScreenUiState.addLocalHint(hint)
         }
     }
 
-
-     fun centerOnScreenLocation() {
-        mapScreenUiState.centerOnScreenLocation()
-        mapScreenUiState.updateSearchBarText("${userLocation.value?.latitude}, ${userLocation.value?.longitude}")
-    }
-
-    fun setScreenLocationFromQueryString(query: String) {
-        val longitude: Double?
-        val latitude: Double?
-        TODO()
-        if(query.contains(Regex.fromLiteral("/[a-z]/"))){
-                consoledebug("Bologna")
-                latitude = geocoder.geocode2(query).latitude
-                longitude = geocoder.geocode2(query).longitude
-        } else {
-            consoledebug("coordinate")
-            query.split(",").run {
-                latitude = firstOrNull()?.toDoubleOrNull()
-                longitude = getOrNull(1)?.toDoubleOrNull()
-            }
-        }
-        if (latitude != null && longitude != null) {
-            changeScreenLocation(latitude, longitude)
-            mapScreenUiState.centerOnScreenLocation()
-        }
-    }
 
     /////////////////////////////////////////////////
     //////////////MEASUREMENTS OPERATIONS///////////
@@ -388,13 +391,24 @@ open class MyViewModel @Inject constructor(
 
     init{
 
+        viewModelScope.launch {
+            settingsDataStore.data.first().let {settingsSnap ->
+                mapScreenUiState.setScreenLocation(
+                    latitude = settingsSnap.lastLocationLat,
+                    longitude = settingsSnap.lastLocationLon
+                )
+            }
+
+        }
+
         consoledebug("My ViewModel is Initialized")
 
         //wait for reading of the last location saved, so that app can start in that position
+        /*
         runBlocking{
 
             settingsDataStore.data.first().let {settingsSnap ->
-                mapScreenUiState.changeScreenLocation(
+                mapScreenUiState.setScreenLocation(
                     latitude = settingsSnap.lastLocationLat,
                     longitude = settingsSnap.lastLocationLon
                 )
@@ -402,6 +416,7 @@ open class MyViewModel @Inject constructor(
 
 
         }
+         */
 
         //registerRunMeasurementReceiver()
 

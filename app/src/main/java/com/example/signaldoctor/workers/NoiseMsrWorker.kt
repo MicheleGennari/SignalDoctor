@@ -22,6 +22,7 @@ import com.arthenica.ffmpegkit.ReturnCode
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.FlowLocationProvider
+import com.example.signaldoctor.appComponents.isLocationPermissionGranted
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.realtimeFirebase.SoundMeasurementFirebase
@@ -36,12 +37,8 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import java.io.IOException
-import java.util.Date
-import java.util.UUID
 import java.util.regex.Pattern
 import kotlin.IllegalStateException
-import kotlin.reflect.KClass
-import kotlin.reflect.KProperty
 
 const val RECORDING_TIME = 5000L
 const val REC_FILE_NAME = "temp_msr_recording.3gp"
@@ -49,7 +46,7 @@ const val REC_FILE_NAME = "temp_msr_recording.3gp"
 
 @HiltWorker
 class NoiseMsrWorker @AssistedInject constructor(
-    @Assisted ctx : Context,
+    @Assisted private val ctx : Context,
     @Assisted params : WorkerParameters,
     private val appSettings : DataStore<AppSettings>,
     private val msrsRepo: MsrsRepo,
@@ -63,18 +60,23 @@ class NoiseMsrWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result {
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.S)
-            try {
-                setForeground(getForegroundInfo())
-            } catch (e: IllegalStateException) {
-                Log.e(
-                    "NOISE MEASUREMENT WORKER ERROR",
-                    "Can't run as foreground services due to restrictions"
-                )
-                e.printStackTrace()
-            }
 
-        return noiseWork()
+
+        return if(!ctx.isLocationPermissionGranted()) Result.failure() else {
+
+                try {
+                    setForeground(getForegroundInfo())
+                } catch (e: IllegalStateException) {
+                    Log.e(
+                        "NOISE MEASUREMENT WORKER ERROR",
+                        "Can't run as foreground services due to restrictions"
+                    )
+                    e.printStackTrace()
+                }
+
+            noiseWork()
+        }
+
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {

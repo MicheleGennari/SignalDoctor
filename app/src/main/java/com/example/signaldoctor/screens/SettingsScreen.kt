@@ -1,5 +1,8 @@
 package com.example.signaldoctor.screens
 
+import android.content.ComponentName
+import android.content.Intent
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -7,11 +10,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
@@ -22,6 +28,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -29,9 +36,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,26 +55,35 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.core.content.IntentCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.R
-import com.example.signaldoctor.appComponents.MainActivity
-import com.example.signaldoctor.appComponents.viewModels.LOCATION_INTERVAL
-import com.example.signaldoctor.appComponents.viewModels.LOCATION_PRIORITY
 import com.example.signaldoctor.appComponents.viewModels.SettingsScreenVM
 import com.example.signaldoctor.contracts.Measure
+import com.example.signaldoctor.services.BackgroundMeasurementsService
+import com.example.signaldoctor.services.DURATION_KEY
+import com.example.signaldoctor.services.RUN_BACKGROUND_ACTION
+import com.example.signaldoctor.services.STOP_BACKGROUND_ACTION
 import com.example.signaldoctor.ui.theme.SignalDoctorTheme
+import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.MSRS_TO_TAKE_MAX
+import com.example.signaldoctor.utils.MSRS_TO_TAKE_MIN
 import com.example.signaldoctor.utils.OptionalSliderDefaults
+import com.example.signaldoctor.utils.PERIODICITY_MAX
+import com.example.signaldoctor.utils.PERIODICITY_MIN
+import com.example.signaldoctor.utils.toEpochMillis
+import com.example.signaldoctor.utils.toZoneDateTime
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
-import com.google.android.gms.location.LocationRequest
+import java.time.Duration
 import java.time.Instant
-import java.time.LocalDateTime
-import java.time.temporal.ChronoField
+import java.time.LocalDate
+import java.time.ZonedDateTime
 import kotlin.math.roundToInt
+
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -79,15 +97,16 @@ fun SettingsScreen(
 
     val locationPermission = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION)
 
-    val phoneSettings by viewModel.phoneSettings.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+    val phoneSettings by viewModel.phoneSettings.collectAsStateWithLifecycle()
 
-    val noiseSettings by viewModel.noiseSettings.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+    val noiseSettings by viewModel.noiseSettings.collectAsStateWithLifecycle()
 
-    val wifiSettings by viewModel.wifiSettings.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+    val wifiSettings by viewModel.wifiSettings.collectAsStateWithLifecycle()
 
     var currentSettingsList by remember{ mutableStateOf(Measure.sound) }
 
     SignalDoctorTheme{
+
         Scaffold(
             modifier = modifier ,
             topBar = {
@@ -128,14 +147,28 @@ fun SettingsScreen(
                         msrsToTake = it
                     }
                 },
-                isBackgroundSwitchEnabled = (currentSettingsList != Measure.sound || recordPermission.status.isGranted)
+                isBackgroundSwitchEnabled =
+                (currentSettingsList != Measure.sound || recordPermission.status.isGranted)
                         && locationPermission.status.isGranted,
-                onIsBackgroundOnChange = {
+                onIsBackgroundChange = {
+
+                    if(locationPermission.status.isGranted){
+                        if(currentSettingsList != Measure.sound || recordPermission.status.isGranted)
+                            viewModel.updateMeasureSettings(currentSettingsList) {
+                                isBackgroundMsrOn = it
+                            }
+                        else recordPermission.launchPermissionRequest()
+                    } else locationPermission.launchPermissionRequest()
+
+                    /*
                     if((currentSettingsList != Measure.sound || recordPermission.status.isGranted) && locationPermission.status.isGranted){
                         viewModel.updateMeasureSettings(currentSettingsList) {
                             isBackgroundMsrOn = it
                         }
-                    }
+                    } else if(!recordPermission.status.isGranted) recordPermission.launchPermissionRequest()
+                    else if(!locationPermission.status.isGranted) locationPermission.
+                            launchPermissionRequest()
+                    */
                 },
                 onPeriodicityChange = {
                     viewModel.updateMeasureSettings(currentSettingsList){
@@ -144,7 +177,10 @@ fun SettingsScreen(
                 },
                 onFreshnessChange = {
                     viewModel.updateMeasureSettings(currentSettingsList){
+                        consoledebug("Updating freshness...")
+                        consoledebug("freshness was ${freshness.toZoneDateTime()}")
                         freshness = it
+                        consoledebug("the user selected freshness is ${it.toZoneDateTime()}")
                     }
                 },
                 onOldnessChange = {
@@ -264,7 +300,6 @@ fun SettingsTab(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MeasurementSettingsList(
     modifier: Modifier = Modifier,
@@ -273,7 +308,7 @@ fun MeasurementSettingsList(
     titleFontSize : TextUnit = 6.em,
     optionDescriptionFontSize : TextUnit = 4.em,
     divider : @Composable ColumnScope.() -> Unit = {},
-    onIsBackgroundOnChange : (Boolean) -> Unit,
+    onIsBackgroundChange : (Boolean) -> Unit,
     isBackgroundSwitchEnabled : Boolean = true,
     onPeriodicityChange : (Int) -> Unit,
     onUseMsrsToTakeChange : (Boolean) -> Unit,
@@ -281,7 +316,7 @@ fun MeasurementSettingsList(
     onFreshnessChange: (Long) -> Unit,
     onOldnessChange: (Long) -> Unit,
 
-){
+    ){
 
 
     Column(
@@ -299,14 +334,15 @@ fun MeasurementSettingsList(
             checkMode = OptionalSliderDefaults.CheckMethod.SWITCH,
             value = measurementSettings.periodicity,
             checked = isBackgroundSwitchEnabled && measurementSettings.isBackgroundMsrOn,
-            onChecked = onIsBackgroundOnChange,
+            onChecked = onIsBackgroundChange,
             description = "Background measurement",
-            valueText ="every "+if (measurementSettings.periodicity == 1)
-                    " 1 minute"
-                else
-                    "${measurementSettings.periodicity} minutes"
-            ,
+            valueText ="every "+ when (measurementSettings.periodicity) {
+                1 -> " 1 minute"
+                else -> "${measurementSettings.periodicity} minutes "
+            },
             onValueChange = onPeriodicityChange,
+            valueRange = PERIODICITY_MIN.toFloat().rangeTo(PERIODICITY_MAX.toFloat()),
+            steps = PERIODICITY_MAX / PERIODICITY_MIN -2
         )
 
         divider()
@@ -315,23 +351,33 @@ fun MeasurementSettingsList(
             checked = measurementSettings.useMsrsToTake,
             onChecked = onUseMsrsToTakeChange,
             value = measurementSettings.msrsToTake,
-            steps = 5,
-            valueRange = (1f.rangeTo(30f)),
+            valueRange = MSRS_TO_TAKE_MIN.toFloat().rangeTo(MSRS_TO_TAKE_MAX.toFloat()),
+            steps = MSRS_TO_TAKE_MAX / MSRS_TO_TAKE_MIN -2,
             onValueChange = onMsrsToTakeChange,
-            description = "Compute average upon the most recent measurements",
+            description = "Color map upon the most recent measurements",
             valueText = "over the last ${measurementSettings.msrsToTake} measurements"
         )
 
         divider()
+            RangeDatePickerSetting(
+                description = "Select the time range for evaluating averages",
+                freshness = measurementSettings.freshness,
+                oldness = measurementSettings.oldness,
+                onFreshnessChange = onFreshnessChange,
+                onOldnessChange = onOldnessChange
+            )
 
-        RangeDatePickerSetting(
-            description = "Select the time range for evaluating averages",
-            freshness = measurementSettings.freshness,
-            oldness =measurementSettings.oldness,
-            onFreshnessChange = onFreshnessChange,
-            onOldnessChange = onOldnessChange
+        /*
+        RangeDatePickerSetting2(
+            description = "Select the time range of which measurements will be polled",
+            startDateTitle = "from",
+            startDate = measurementSettings.freshness,
+            onStartDateChange = onFreshnessChange,
+            endDateTitle = "to",
+            endDate = measurementSettings.oldness,
+            onEndDateChange = onOldnessChange
         )
-
+        */
 
     }
 
@@ -428,49 +474,76 @@ fun OptionalSliderSetting(
 @Composable
 fun RangeDatePickerSetting(
     modifier: Modifier = Modifier,
-    freshness : Long = LocalDateTime.now().getLong(ChronoField.MILLI_OF_SECOND),
-    oldness : Long = LocalDateTime.now().minusDays(1).getLong(ChronoField.MILLI_OF_SECOND),
+    freshness : Long = ZonedDateTime.now().toEpochMillis(),
+    oldness : Long = ZonedDateTime.now().minusDays(1).toEpochMillis(),
     optionDescriptionFontSize : TextUnit = 4.em,
     description: String = "This is a range date picker setting",
     headlineFontSize : TextUnit = 4.em,
     onFreshnessChange : (Long) -> Unit,
     onOldnessChange : (Long) -> Unit,
-    dateValidator: (Long) -> Boolean = {true}
+    dateValidator: (Long) -> Boolean = {true},
 
 ){
 
-    Text(
-        fontSize = optionDescriptionFontSize,
-        text = description
-    )
-    Divider(
-        color = Color.Transparent,
-        thickness = 12.dp
-    )
-    PickerToggableDialog(
-        date = freshness,
-        onDateChange = onFreshnessChange,
-        dateValidator = dateValidator
-    )
-    PickerToggableDialog(
-        date = oldness,
-        onDateChange = onOldnessChange,
-        dateValidator = dateValidator
-    )
+    Column(
+        modifier = modifier
+    ){
+        Text(
+            fontSize = optionDescriptionFontSize,
+            text = description
+        )
+        Divider(
+            color = Color.Transparent,
+            thickness = 12.dp
+        )
+        Row{
+
+            PickerToggableDialog(
+                modifier= modifier.weight(5 / 10f),
+                date = oldness,
+                title = "to",
+                onDateChange = onOldnessChange,
+                dateValidator = {
+                    if (it <= freshness && dateValidator(it)) {
+                        onOldnessChange(it)
+                        true
+                    } else false
+                }
+            )
+
+            PickerToggableDialog(
+                modifier = modifier.weight(5 / 10f),
+                date = freshness,
+                title = "from",
+                onDateChange = onFreshnessChange,
+                dateValidator = {
+                    if (it >= oldness && dateValidator(it)) {
+                        onFreshnessChange(it)
+                        true
+                    } else false
+                }
+            )
+
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PickerToggableDialog(
     modifier: Modifier = Modifier,
+    title: String = "date picker",
     dateValidator : (Long) -> Boolean = {true},
     date : Long? = Instant.now().toEpochMilli(),
     onDateChange : (Long) -> Unit = {}
 ){
+
+
     val pickerState = rememberDatePickerState(
         initialSelectedDateMillis = date,
-        initialDisplayMode = DisplayMode.Input
+        initialDisplayMode = DisplayMode.Input,
     )
+
 
     Box(
         modifier = modifier
@@ -491,26 +564,173 @@ fun PickerToggableDialog(
                     }
                 }) {
                 DatePicker(
+                    title = null,
                     state = pickerState,
+                    headline =  {
+                        Text(
+                            modifier= Modifier.padding(start = 20.dp),
+                            text = title
+                        )
+                    },
                     dateValidator = dateValidator
                 )
             }
         } else {
+            Row(
+                verticalAlignment = Alignment.Top
+            ){
+                DatePicker(
+                    modifier = Modifier.fillMaxWidth(9 / 10f),
+                    state = pickerState,
+                    title = null,
+                    headline = null,
+                    showModeToggle = false,
+                    dateValidator = { newDate: Long ->
+                        consoledebug("inside date validator")
+                        onDateChange(newDate)
+                        true
+                    }
+                )
+                IconButton(
+                    modifier = Modifier,
+                    onClick = {
+                    pickerState.displayMode = DisplayMode.Picker
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = "open date picker"
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RangeDatePickerSetting2(
+    modifier: Modifier = Modifier,
+    description : String = "This is a Range Date Picker",
+    startDateTitle : String = "Start Date",
+    startDate : Long = Instant.now().toEpochMilli(),
+    onStartDateChange : (Long) -> Unit,
+    endDateTitle : String = "End Date",
+    endDate : Long = Instant.now().minus(Duration.ofDays(7)).toEpochMilli(),
+    onEndDateChange : (Long) -> Unit
+){
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceAround
+    ){
+        OutlinedDateBox(
+            modifier = modifier.weight(4/10f),
+            labelText = startDateTitle,
+            date = startDate,
+            onDateChange = onStartDateChange,
+        )
+
+        Spacer(modifier = modifier.weight(1/10f))
+
+        OutlinedDateBox(
+            modifier = modifier.weight(4/10f),
+            labelText = endDateTitle,
+            date = endDate,
+            onDateChange = onEndDateChange
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun OutlinedDateBox(
+    modifier: Modifier = Modifier,
+    labelText : String = "date",
+    date : Long? = Instant.now().toEpochMilli(),
+    trailingIcon : @Composable ( (()->Unit)-> Unit) = { onClick ->
+                  IconButton(onClick = onClick) {
+                      Icon(
+                          imageVector = Icons.Default.DateRange,
+                          contentDescription = "d"
+                      )
+                  }
+    },
+    dateValidator: (Long) -> Boolean = {true},
+    onDateChange: (Long) -> Unit
+){
+
+    var toggleDatePicker by remember{ mutableStateOf(false) }
+
+    OutlinedTextField(
+        modifier = modifier,
+        value = "${date?.toLocalDate()}",
+        readOnly = true,
+        onValueChange = {},
+        label = {
+            Text(text = labelText)
+        },
+        trailingIcon = { trailingIcon{
+            toggleDatePicker = true
+        }}
+    )
+    if(toggleDatePicker){
+
+        val datePickerState = rememberDatePickerState(
+            initialDisplayMode = DisplayMode.Picker,
+            initialSelectedDateMillis = date
+        )
+
+        DatePickerDialog(
+            onDismissRequest = {
+                toggleDatePicker = false
+                },
+            confirmButton = {
+                TextButton(onClick = {
+                    toggleDatePicker = false
+                }) {
+                    Text(text = "Confirm")
+                }
+            }
+        ) {
             DatePicker(
-                modifier = Modifier.fillMaxWidth(9 / 10f),
-                state = pickerState,
-                title = null,
-                headline = null,
-                dateValidator = { newDate : Long ->
-                    onDateChange(newDate)
-                    true
+                state = datePickerState,
+                dateValidator = {
+                    if(dateValidator(it)){
+                        onDateChange(it)
+                        true
+                    } else false
                 }
             )
         }
     }
 }
 
+@Composable
+fun startBackgroundMeasurement(msrType : Measure, minutes : Long = 15L) : ComponentName?{
 
+    val intent = Intent(LocalContext.current.applicationContext, BackgroundMeasurementsService::class.java).apply {
+        action = RUN_BACKGROUND_ACTION
+        putExtra(msrType.name, msrType.ordinal)
+        putExtra(DURATION_KEY, minutes)
+    }
+
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+        LocalContext.current.applicationContext.startForegroundService(intent)
+    else
+        LocalContext.current.applicationContext.startService(intent)
+
+}
+
+@Composable
+fun stopBackgroundMeasurement(msrType: Measure) : Boolean {
+
+    val intent = Intent(LocalContext.current.applicationContext, BackgroundMeasurementsService::class.java).apply {
+        action = STOP_BACKGROUND_ACTION
+        putExtra(msrType.name, msrType.ordinal)
+    }
+
+    return LocalContext.current.applicationContext.stopService(intent)
+
+}
 
 fun <T>msrTypeWhen(
     currentMsrType : Measure,
@@ -518,7 +738,7 @@ fun <T>msrTypeWhen(
     sound : T,
     wifi : T
 ) : T {
-   return when(currentMsrType){
+    return when(currentMsrType){
         Measure.sound -> phone
         Measure.wifi -> sound
         Measure.phone -> wifi
@@ -537,3 +757,6 @@ fun msrTypeWHen(
         Measure.sound -> sound()
     }
 }
+
+
+fun Long.toLocalDate(): LocalDate = toZoneDateTime().toLocalDate()

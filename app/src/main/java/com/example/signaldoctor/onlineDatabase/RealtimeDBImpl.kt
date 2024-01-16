@@ -10,6 +10,7 @@ import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.PhoneMeasurement
 import com.example.signaldoctor.room.SoundMeasurement
 import com.example.signaldoctor.room.WiFIMeasurement
+import com.example.signaldoctor.screens.msrTypeWhen
 import com.example.signaldoctor.utils.Loggers
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.example.signaldoctor.workers.printAndReturn
@@ -135,6 +136,22 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
         return getBaseMsrs(Measure.wifi, WiFIMeasurement::class.java, wifiMsrsFilter(settings))
     }
 
+
+    override fun getOldestDate(msrType: Measure) = db.reference.child(
+        msrTypeWhen(msrType,
+            phone = PHONE_TABLE_PATH,
+            sound = SOUND_TABLE_PATH,
+            wifi = WIFI_TABLE_PATH
+            )
+    ).snapshots.flowOn(Dispatchers.IO).map { tileIndexes ->
+        tileIndexes.children.flatMap { tileIndexMsrs ->
+            tileIndexMsrs.children.mapNotNull { measurement ->
+                measurement.getValue<MeasurementBase>()?.date
+            }
+        }.min()
+    }.flowOn(Dispatchers.Default)
+
+
     override fun countMeasurements(msrType : Measure, userLocation : Location, limitDate : Date) : Flow<Boolean> {
 
         val currentTileIndex = MapView.getTileSystem().tileIndexFromLocation(userLocation)
@@ -152,14 +169,9 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
                 }
         }.map { measurementsSnap ->
             measurementsSnap.mapNotNull { measurementSnap ->
-                consoledebug("prova funzionante")
-                printAndReturn("data snapshot",measurementSnap.value)
-                printAndReturn("RealtimeDB count msrs", measurementSnap.getValue<MeasurementBase>())
+                measurementSnap.getValue<MeasurementBase>()
             }.count { measurement ->
-
-                printAndReturn("RealtimeDB count msrs, this msr has date: ",measurement.date).after(
-                    printAndReturn("limitDate:", limitDate)
-                )
+                measurement.date.after(limitDate)
             } <1
         }.flowOn(Dispatchers.Default)
     }

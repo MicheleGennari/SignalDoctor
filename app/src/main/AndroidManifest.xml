@@ -37,6 +37,8 @@
             </intent-filter>
         </activity>
 
+        <service android:name=".services.BackgroundMeasurementsService"/>
+
         <service android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="microphone|shortService"
             tools:node="merge"/>

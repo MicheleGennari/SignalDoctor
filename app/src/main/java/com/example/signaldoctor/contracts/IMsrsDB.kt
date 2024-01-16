@@ -21,6 +21,8 @@ interface IMsrsDB {
 
     fun getWifiMsrs(settings: MeasurementSettings) : Flow<List<WiFIMeasurement?>>
 
+    fun getOldestDate(msrType: Measure) : Flow<Date>
+
     fun countMeasurements(msrType: Measure, userLocation : Location, limitDate : Date) : Flow<Boolean>
 
     fun postPhoneMsr(phoneMeasurement: PhoneMeasurement) : Boolean

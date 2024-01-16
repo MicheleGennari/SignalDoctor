@@ -4,7 +4,9 @@ import android.content.IntentFilter
 import android.os.Bundle
 import android.preference.PreferenceManager
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.EaseIn
@@ -38,15 +40,8 @@ import org.osmdroid.config.Configuration.getInstance
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    private lateinit var runMeasurementReceiver : RunMeasurementReceiver
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-       /*  ContextCompat.registerReceiver(
-            this,
-            runMeasurementReceiver,
-            IntentFilter().apply { addAction(RUN_MEASUREMENT_ACTION) },
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )*/
         getInstance().load(applicationContext, PreferenceManager.getDefaultSharedPreferences(applicationContext))
         setContent {
 
@@ -118,7 +113,6 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        unregisterReceiver(runMeasurementReceiver)
         super.onDestroy()
     }
 }

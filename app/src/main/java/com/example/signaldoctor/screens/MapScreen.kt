@@ -1,19 +1,21 @@
 package com.example.signaldoctor.screens
 
+import android.content.Context
+import android.content.res.Resources.NotFoundException
+import android.location.Address
 import android.location.Location
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateIntSizeAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandIn
 import androidx.compose.animation.shrinkOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -21,12 +23,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.safeContent
+import androidx.compose.foundation.layout.safeContentPadding
+import androidx.compose.foundation.layout.safeGesturesPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
@@ -35,17 +47,16 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LeadingIconTab
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Snackbar
-import androidx.compose.material3.SnackbarData
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarVisuals
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Tab
@@ -54,13 +65,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -68,26 +78,28 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.signaldoctor.LocalHint
 import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.CHANGE_LOCATION_SETTINGS
 import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.appComponents.viewModels.MyViewModel
-import com.example.signaldoctor.broadcastReceivers.RunMeasurementReceiver
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
 import com.example.signaldoctor.contracts.MsrsMap
 import com.example.signaldoctor.mapUtils.GpsMarker
+import com.example.signaldoctor.mapUtils.QueryAddressTranslator
 import com.example.signaldoctor.mapUtils.SquaredZonesOverlay2
 import com.example.signaldoctor.mapUtils.rememberMap
+import com.example.signaldoctor.searchBarHint.ISearchBarHint
 import com.example.signaldoctor.ui.theme.SignalDoctorTheme
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -95,7 +107,8 @@ import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.android.gms.common.api.ResolvableApiException
-import com.google.android.gms.location.LocationServices
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 
@@ -108,6 +121,7 @@ fun MapScreen(
     ){
     SignalDoctorTheme {
 
+
         val isInternetAvailable by viewModel.isNetworkAvailable.collectAsStateWithLifecycle()
         val locationPermission = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION){ isGranted ->
             when(isGranted) {
@@ -119,15 +133,18 @@ fun MapScreen(
             }
         }
 
-
-        LaunchedEffect(locationPermission.status.isGranted){
-            consoledebug("LocationUpdates effect launched by (re-)composition")
-            viewModel.locationUpdatesOn()
-            viewModel.setUserLocationAsScreenLocation()
+        DisposableEffect(locationPermission.status.isGranted){
+            if(locationPermission.status.isGranted)
+                viewModel.locationUpdatesOn()
+            onDispose {
+                if(!viewModel.areLocationUpdatesOn()){
+                    viewModel.locationUpdatesOff()
+                }
+            }
         }
 
-        val currentNetworkMode by viewModel.networkMode.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
-        val currentMsrType by viewModel.mapScreenUiState.currentMsrType.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val currentNetworkMode by viewModel.networkMode.collectAsStateWithLifecycle()
+        val currentMsrType by viewModel.mapScreenUiState.currentMsrType.collectAsStateWithLifecycle()
 
         val recordPermission = rememberPermissionState(permission = android.Manifest.permission.RECORD_AUDIO){
                 isGranted -> when(isGranted) {
@@ -135,50 +152,51 @@ fun MapScreen(
             false -> consoledebug("Permission DENIED")
             }
         }
-        val screenLocation by viewModel.mapScreenUiState.screenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
-        val userLocation by viewModel.userLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED )
+        val screenLocation by viewModel.mapScreenUiState.screenLocation.collectAsStateWithLifecycle()
+        val userLocation by viewModel.userLocation.collectAsStateWithLifecycle()
 
-        val arePhoneMsrsDated by viewModel.arePhoneMsrsDated.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED)
+
+        val arePhoneMsrsDated by viewModel.arePhoneMsrsDated.collectAsStateWithLifecycle()
         LaunchedEffect(arePhoneMsrsDated){
             if (arePhoneMsrsDated) viewModel.sendRunMeasurementNotification(Measure.phone)
             else viewModel.cancelRunMeasurementNotification(Measure.phone)
         }
-        val areNoiseMsrsDated by viewModel.areNoiseMsrsDated.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED)
+        val areNoiseMsrsDated by viewModel.areNoiseMsrsDated.collectAsStateWithLifecycle()
         LaunchedEffect(areNoiseMsrsDated, recordPermission){
             if (areNoiseMsrsDated && recordPermission.status.isGranted)
                 viewModel.sendRunMeasurementNotification(Measure.sound)
             else
                 viewModel.cancelRunMeasurementNotification(Measure.sound)
         }
-        val areWifiMsrsDated by viewModel.areWifiMsrsDated.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED)
+        val areWifiMsrsDated by viewModel.areWifiMsrsDated.collectAsStateWithLifecycle()
         LaunchedEffect(areWifiMsrsDated){
             if (areWifiMsrsDated) viewModel.sendRunMeasurementNotification(Measure.wifi)
             else viewModel.cancelRunMeasurementNotification(Measure.wifi)
         }
 
-        val searchBarText by viewModel.mapScreenUiState.searchBarText.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
-        val centerOnScreenLocation by viewModel.mapScreenUiState.centerOnScreenLocation.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val searchBarQuery by viewModel.mapScreenUiState.searchBarQuery.collectAsStateWithLifecycle(context = Dispatchers.Default)
+        val isSearchBarLoading by viewModel.mapScreenUiState.isSearchBarLoading.collectAsStateWithLifecycle(context = Dispatchers.Default)
 
-        val measurementProgress by  animateFloatAsState(targetValue = viewModel.measurementProgress.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED).value,
+        val localSearchHints by viewModel.localSearchBarHints.collectAsStateWithLifecycle()
+        val searchHints by viewModel.searchBarHints.collectAsStateWithLifecycle()
+        val showHints by viewModel.mapScreenUiState.searchbarShowHints.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val centerOnScreenLocation by viewModel.mapScreenUiState.centerOnScreenLocation.collectAsStateWithLifecycle()
+
+        val measurementProgress by  animateFloatAsState(targetValue = viewModel.measurementProgress.collectAsStateWithLifecycle().value,
             label = "Measurement Progress Bar"
         )
-        val lastNoiseMsr by viewModel.lastNoiseMsr.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
-        val lastPhoneMsr by viewModel.lastPhoneMsr.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
-        val lastWifiMsr by viewModel.lastWifiMsr.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val lastNoiseMsr by viewModel.lastNoiseMsr.collectAsStateWithLifecycle()
+        val lastPhoneMsr by viewModel.lastPhoneMsr.collectAsStateWithLifecycle()
+        val lastWifiMsr by viewModel.lastWifiMsr.collectAsStateWithLifecycle()
 
-        val soundAvgs by viewModel.soundAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
-        val phoneAvgs by viewModel.phoneAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
-        val wifiAvgs by viewModel.wifiAvgs.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val soundAvgs by viewModel.soundAvgs.collectAsStateWithLifecycle()
+        val phoneAvgs by viewModel.phoneAvgs.collectAsStateWithLifecycle()
+        val wifiAvgs by viewModel.wifiAvgs.collectAsStateWithLifecycle()
 
-        val currentMeasuringState by viewModel.mapScreenUiState.measuringState.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val currentMeasuringState by viewModel.mapScreenUiState.measuringState.collectAsStateWithLifecycle()
 
         val snackbarHostState = remember{SnackbarHostState()}
-
-        StatusSnackBarsLauncher(
-            snackBarHostState = remember{SnackbarHostState()},
-        )
-
-
+        val snackbarLauncher = rememberCoroutineScope()
 
 
         Scaffold(
@@ -189,19 +207,55 @@ fun MapScreen(
                 ){
 
                     SearchBar(
-                        modifier = Modifier,
+                        modifier = Modifier
+                            .zIndex(1f),
                         alignment = Alignment.Center,
-                        text = searchBarText,
-                        onQueryChange = { updatedText ->
-                            viewModel.mapScreenUiState.updateSearchBarText(updatedText)
+                        text = searchBarQuery,
+                        showHints = showHints,
+                        onActiveChange = {
+                                         viewModel.mapScreenUiState.setShowHints(it)
                         },
-                        onSearch = { query -> viewModel.setScreenLocationFromQueryString(query) }
+                        onClickHint = { hint ->
+                            viewModel.mapScreenUiState.setScreenLocation(hint.latitude, hint.longitude)
+                            viewModel.mapScreenUiState.setShowHints(false)
+                        },
+                        localHints = localSearchHints,
+                        onClickLocalHint = { hint ->
+                            viewModel.addLocalHint(hint)
+                            viewModel.mapScreenUiState.setScreenLocation(hint.latitude, hint.longitude)
+                            viewModel.mapScreenUiState.setShowHints(false)
+                        },
+                        hints = searchHints,
+                        onQueryChange = { updatedQuery ->
+                            viewModel.mapScreenUiState.updateSearchBarQuery(updatedQuery)
+                        },
+                        onQueryCancel = {viewModel.mapScreenUiState.updateSearchBarQuery("")},
+                        onSearch = { query ->
+                            QueryAddressTranslator.getCoordFromQuery(query)?.run {
+                                    viewModel.mapScreenUiState.setScreenLocation(
+                                        latitude,
+                                        longitude
+                                    )
+                                } ?: searchHints.firstOrNull()?.run{
+                                    viewModel.mapScreenUiState.setScreenLocation(
+                                        latitude,
+                                        longitude
+                                    )
+                            } ?: snackbarLauncher.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Can't find such location"
+                                )
+                            }
+                            viewModel.mapScreenUiState.setShowHints(false)
+                        },
+                        isSearching = isSearchBarLoading
                     )
-
+                    /*
                     Divider(
                         modifier = Modifier.alpha(0f),
                         thickness = 12.dp
                     )
+
 
                     NetworkModeToggleButton(
                         modifier= Modifier,
@@ -210,10 +264,12 @@ fun MapScreen(
                             if( !(
                                     currentNetworkMode == NetworkMode.OFFLINE
                                     && !isInternetAvailable
-                            ))
+                            )) {
                                 viewModel.switchNetworkMode()
+                            }
                         }
                     )
+                */
                 }
             },
 
@@ -228,27 +284,43 @@ fun MapScreen(
                     userLocation = userLocation,
                     screenLocation= screenLocation,
                     centerOnUserLocation = centerOnScreenLocation,
-                    disableCenterOnUserLocation = {viewModel.mapScreenUiState.disableCenterOnScreenLocation()},
-                    updateSearchBarText = {viewModel.mapScreenUiState.updateSearchBarText(it) }
+                    onEndCenterOnUserLocation = {viewModel.mapScreenUiState.setCenterOnScreenLocation(false)},
+                    updateSearchBarText = {viewModel.mapScreenUiState.updateSearchBarQuery(it) }
                 )
 
-
-            },
-            floatingActionButton = {
-
-            },
-            bottomBar = {
-
                 Column(
-                    modifier = modifier.zIndex(2f),
-                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                  modifier = modifier
+                      .fillMaxHeight()
+
+                      .padding(paddingValues)
+                      .padding(horizontal = 10.dp, vertical = 10.dp),
+                  verticalArrangement = Arrangement.SpaceBetween
                 ){
                     Row(
+                        modifier = Modifier.weight(1/10f)
+                    ){
+                        NetworkModeToggleButton(
+                            checked = currentNetworkMode == NetworkMode.ONLINE,
+                            onCheckedChange = {
+                                if (!(
+                                            currentNetworkMode == NetworkMode.OFFLINE
+                                                    && !isInternetAvailable
+                                            )
+                                ) {
+                                    viewModel.switchNetworkMode()
+                                }
+                            }
+                        )
+                    }
+                    Spacer(modifier = modifier.weight(4/10f))
+                    Row(
                         modifier = Modifier
-                            .fillMaxWidth(),
+                            .weight(2 / 10f)
+                            .fillMaxWidth()
+                            ,
                         // .padding(horizontal = 30.dp),
                         verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.SpaceAround
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
 
                         val mainActivity = LocalContext.current as MainActivity
@@ -261,16 +333,23 @@ fun MapScreen(
                                 if (!locationPermission.status.isGranted)
                                     locationPermission.launchPermissionRequest()
                                 else if (userLocation == null) {
-                                        try {
-                                            viewModel.checkLocationSettings(mainActivity)
-                                        } catch (resolvable: ResolvableApiException) {
+                                    try {
+                                        viewModel.checkLocationSettings(mainActivity)
+                                    } catch (resolvable: ResolvableApiException) {
 
-                                            resolvable.startResolutionForResult(
-                                                mainActivity,
-                                                CHANGE_LOCATION_SETTINGS
-                                            )
-                                        }
-                                }else viewModel.setUserLocationAsScreenLocation()
+                                        resolvable.startResolutionForResult(
+                                            mainActivity,
+                                            CHANGE_LOCATION_SETTINGS
+                                        )
+                                    }
+                                } else {
+                                    viewModel.mapScreenUiState.setScreenLocation(
+                                        userLocation!!.latitude,
+                                        userLocation!!.longitude
+                                    )
+                                    viewModel.getLocationNameFromUserLocation()
+                                    viewModel.mapScreenUiState.setShowHints(false)
+                                }
                             }
                         )
 
@@ -298,14 +377,99 @@ fun MapScreen(
                                         viewModel.cancelBackgroundMeasurement(currentMsrType)
                                     }
                                 }
-                            }
+                            },
+                            enabled = userLocation != null,
                         )
 
                         SettingsButton(
                             onClick = navigateToSettings
                         )
                     }
+                }
 
+            },
+            floatingActionButton = {
+
+
+            },
+            bottomBar = {
+
+                Column(
+                    modifier = modifier.zIndex(2f),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ){
+                  /*
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth(),
+                        // .padding(horizontal = 30.dp),
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+
+                        val mainActivity = LocalContext.current as MainActivity
+
+                        UserLocationButton(
+                            modifier = Modifier.size(60.dp),
+                            enabled = userLocation != null,
+                            onClick = {
+
+                                if (!locationPermission.status.isGranted)
+                                    locationPermission.launchPermissionRequest()
+                                else if (userLocation == null) {
+                                        try {
+                                            viewModel.checkLocationSettings(mainActivity)
+                                        } catch (resolvable: ResolvableApiException) {
+
+                                            resolvable.startResolutionForResult(
+                                                mainActivity,
+                                                CHANGE_LOCATION_SETTINGS
+                                            )
+                                        }
+                                }else {
+                                    viewModel.mapScreenUiState.setScreenLocation(
+                                        userLocation!!.latitude,
+                                        userLocation!!.longitude
+                                    )
+                                    viewModel.getLocationNameFromUserLocation()
+                                    viewModel.mapScreenUiState.setShowHints(false)
+                                }
+                            }
+                        )
+
+                        MeasuringButton(
+                            modifier = Modifier,
+                            measuringState = currentMeasuringState,
+                            measurementProgress = measurementProgress,
+                            onClick = {
+                                when (currentMeasuringState) {
+                                    MeasuringState.STOP -> {
+
+                                        if (currentMsrType == Measure.sound && !recordPermission.status.isGranted)
+                                            recordPermission.launchPermissionRequest()
+                                        else
+                                            viewModel.runMeasurement(currentMsrType)
+
+                                    }
+
+                                    MeasuringState.RUNNING -> {
+                                        viewModel.cancelMeasurement(currentMsrType)
+                                        //viewModel.changeMeasuringState(MeasuringState.STOP)
+                                    }
+
+                                    MeasuringState.BACKGROUND -> {
+                                        viewModel.cancelBackgroundMeasurement(currentMsrType)
+                                    }
+                                }
+                            },
+                            enabled = userLocation != null,
+                        )
+
+                        SettingsButton(
+                            onClick = navigateToSettings
+                        )
+                    }
+                    */
                     MsrsBar(
                         currentMsrType = currentMsrType,
                         changeCurrentMsrMode = { newMode ->
@@ -343,7 +507,7 @@ fun Map(
     userLocation : Location?,
     screenLocation : Location?,
     centerOnUserLocation : Boolean = false,
-    disableCenterOnUserLocation : () -> Unit = {},
+    onEndCenterOnUserLocation : () -> Unit = {},
     updateSearchBarText : (String) -> Unit = {},
 ) {
 
@@ -433,9 +597,8 @@ fun Map(
                                 16.6,
                                 500
                             )
-                            updateSearchBarText("$latitude, $longitude")
                         }
-                        disableCenterOnUserLocation()
+                        onEndCenterOnUserLocation()
                     }
                 }
                 invalidate()
@@ -478,10 +641,19 @@ fun SearchBar(
 fun SearchBar(
     modifier: Modifier = Modifier,
     alignment: Alignment = Alignment.Center,
-    text : String = "",
-    onQueryChange: (String) -> Unit = {},
+    text : String = " ",
+    showHints : Boolean = true,
+    onActiveChange : (Boolean) -> Unit = {},
+    onClickHint: (ISearchBarHint) -> Unit = { _ ->},
+    onClickLocalHint : (ISearchBarHint) -> Unit = { _ ->},
+    isSearching : Boolean = false,
+    localHints : List<ISearchBarHint> = emptyList(),
+    hints : List<ISearchBarHint> = emptyList(),
+    onQueryChange : (String) -> Unit = {},
+    onQueryCancel : () -> Unit = {},
     onSearch: (String) -> Unit = {}
 ){
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -490,29 +662,113 @@ fun SearchBar(
         horizontalArrangement = Arrangement.Center
     ) {
         DockedSearchBar(
-            modifier = modifier,
             query = text,
             placeholder = {
                           Text(text = "Cerca qui", fontWeight = FontWeight.Light)
             },
             onQueryChange = onQueryChange,
             onSearch = onSearch,
-            active = false,
-            onActiveChange = {},
+            active = showHints,
+            onActiveChange = onActiveChange,
+            leadingIcon = {
+                AnimatedContent(showHints, label = "search bar leading icon") {showHints ->
+                    IconButton(
+                        enabled = showHints,
+                        onClick = {
+                        if(showHints) onActiveChange(false)
+                    }) {
+                        Icon(
+                            modifier = modifier.padding(7.dp),
+                            painter = painterResource(id = if(showHints) R.drawable.back_button else R.drawable.search_icon2),
+                            contentDescription = "Exit search bar input mode"
+                        )
+                    }
+                }
+            },
             trailingIcon = {
-                Icon(
-                    modifier = Modifier
-                        .padding(15.dp)
-                        .clickable {
-                            onSearch(text)
-                        },
-                    painter = painterResource(id = R.drawable.search_icon2),
-                    contentDescription = "Search button"
+                AnimatedVisibility(showHints) {
+                        IconButton(onClick = {
+                            onQueryCancel()
+                        }) {
+                            Icon(
+                                modifier = Modifier
+                                    .padding(13.dp),
+                                painter = painterResource(id = R.drawable.x_icon),
+                                contentDescription = "Search button"
+                            )
+                        }
+                }
+            }
+        ) {
+            if (!isSearching){
+
+                SearchBarHints(
+                    hints = localHints,
+                    hintsColor = MaterialTheme.colorScheme.secondary,
+                    onClickHint = { hint ->
+                            onClickHint(hint)
+                    }
                 )
-            })
-        {}
+
+                SearchBarHints(
+                    hints = hints,
+                    hintsColor = MaterialTheme.colorScheme.primary,
+                    onClickHint = { hint ->
+                        onClickLocalHint(hint)
+                    }
+                ){
+                    ListItem(headlineContent = {
+                        Text(
+                            text = "no results found",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    })
+                }
+
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 25.dp),
+                    contentAlignment = Alignment.Center
+                ){ CircularProgressIndicator() }
+            }
+        }
     }
 }
+
+@Composable
+fun SearchBarHints(
+    modifier: Modifier = Modifier,
+    hints: List<ISearchBarHint>,
+    hintsColor : Color = MaterialTheme.colorScheme.onPrimary,
+    onClickHint : (ISearchBarHint) -> Unit,
+    onEmpty : ( @Composable () -> Unit)? = null
+){
+
+    Column(
+        modifier = modifier
+    ){
+        for (hint in hints) {
+            ListItem(
+                modifier = Modifier.clickable {
+                    onClickHint(hint)
+                },
+                headlineContent = {
+                    Text(
+                        color = hintsColor,
+                        text = hint.locationName
+                    )
+                })
+            Divider(
+                thickness = Dp.Hairline
+            )
+        }
+        if (hints.isEmpty() && onEmpty != null) onEmpty()
+    }
+
+}
+
 
 ////////////////////////////////////////////
 // Composables for Buttons
@@ -569,6 +825,7 @@ fun UserLocationButton(
 fun MeasuringButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
+    enabled: Boolean = true,
     fabInteractions : MutableInteractionSource = remember{MutableInteractionSource()} ,
     measuringState: MeasuringState = MeasuringState.STOP,
     measurementProgress : Float = 5/10f,
@@ -593,8 +850,8 @@ fun MeasuringButton(
         interactionSource = fabInteractions,
         text = {},
         expanded = false,
-        containerColor = MaterialTheme.colorScheme.onPrimary,
-        onClick = onClick,
+        containerColor = if(enabled) MaterialTheme.colorScheme.onPrimary else  Color.DarkGray,
+        onClick = if(enabled) onClick else fun () {},
         shape = CircleShape,
         icon = {
 
@@ -682,7 +939,7 @@ fun MsrsBar(
     changeCurrentMsrMode : (Measure) -> Unit = {},
 ){
     TabRow(
-        modifier = modifier,
+        modifier = modifier.animateContentSize(),
         selectedTabIndex = currentMsrType.ordinal,
     ) {
         for(tabMsrType in Measure.values()) {
@@ -708,14 +965,25 @@ fun MsrTab(
     selected : Boolean = true,
     msrName : String = "Phone",
     lastMsr : Int? = 0,
+    onColorMsr : (Int) -> Color = {
+                 when{
+                     it<=-60 -> Color.Red
+                     it>-60 && it<=-40 -> Color.Yellow
+                     else -> Color.Green
+                 }
+    },
     onClick : () -> Unit = {}
 ){
-    
+
+    val tabMsrColor by animateColorAsState(
+        targetValue = lastMsr?.let { onColorMsr(lastMsr) } ?: LocalContentColor.current,
+        label = "msr color scale animation"
+    )
+
 
     Tab(
         modifier = modifier,
         selected = selected ,
-        unselectedContentColor = MaterialTheme.colorScheme.primary,
         text = {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -756,4 +1024,26 @@ fun StatusSnackBarsLauncher(
             snackBarHostState.showSnackbar(snackBar)
         }
     }
+}
+
+@Composable
+fun Toast(
+    resId : Int? = null,
+    message : String,
+    duration : Int = Toast.LENGTH_SHORT
+){
+    if(resId != null)
+        Toast.makeText(LocalContext.current, resId, duration).show()
+    else
+        Toast.makeText(LocalContext.current, message, duration).show()
+}
+
+fun Context.launchToast(resId: Int? = null, message: String, duration: Int = Toast.LENGTH_SHORT){
+    if(resId != null) try{
+        Toast.makeText(this, resId, duration).show()
+    } catch (e : NotFoundException){
+        e.printStackTrace()
+    }
+    else
+        Toast.makeText(this, message, duration).show()
 }

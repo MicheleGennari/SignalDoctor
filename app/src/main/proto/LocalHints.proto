@@ -1,0 +1,29 @@
+
+syntax = "proto3";
+
+
+option java_package = "com.example.signaldoctor";
+option java_multiple_files = true;
+
+message LocalHint{
+
+  reserved 3;
+  reserved "OBSOLETE_matchName";
+
+  double latitude = 1;
+  double longitude = 2;
+  string displayName = 4;
+
+}
+
+message LocalHints{
+
+  reserved 2;
+  reserved "address_Json";
+
+  map<string, LocalHint> OBSOLETE_localHints = 1;
+
+  repeated LocalHint localHints = 3;
+
+
+}

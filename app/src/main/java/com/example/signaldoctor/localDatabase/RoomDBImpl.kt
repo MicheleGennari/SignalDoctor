@@ -13,6 +13,7 @@ import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.PhoneMeasurement
 import com.example.signaldoctor.room.SoundMeasurement
 import com.example.signaldoctor.room.WiFIMeasurement
+import com.example.signaldoctor.screens.msrTypeWhen
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.example.signaldoctor.workers.MsrWorkersInputData
 import kotlinx.coroutines.Dispatchers
@@ -84,6 +85,14 @@ class RoomDBImpl @Inject constructor(
         }
     }
 
+
+    override fun getOldestDate(msrType: Measure) = msrsDB.run {
+        msrTypeWhen(msrType,
+            phone = phoneMeasurementDAO().getOldestDate(),
+            sound = soundMeasurementDAO().getOldestDate(),
+            wifi = wifiMeasurementDAO().getOldestDate()
+            )
+    }
 
 
     override fun close() {

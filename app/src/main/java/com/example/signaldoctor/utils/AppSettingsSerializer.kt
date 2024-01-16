@@ -1,28 +1,31 @@
 package com.example.signaldoctor.utils
 
-import android.net.Network
 import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
 import com.example.signaldoctor.AppSettings
-import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.NetworkMode
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.temporal.ChronoField
-import java.util.Date
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
-class AppSettingsSerializer() : Serializer<AppSettings> {
+const val APP_LAUNCH_LOCATION_LAT = 44.498955
+const val APP_LAUNCH_LOCATION_LON = 11.327591
+
+class AppSettingsSerializer : Serializer<AppSettings> {
 
     override val defaultValue: AppSettings
         get() = AppSettings.getDefaultInstance().toBuilder().apply {
-            lastLocationLat = 44.498955
-            lastLocationLon = 11.327591
-            wifiSettings = MeasurementSettingsPopulatedDefaultInstance()
-            noiseSettings = MeasurementSettingsPopulatedDefaultInstance()
-            phoneSettings = MeasurementSettingsPopulatedDefaultInstance()
+
+            lastLocationLat = APP_LAUNCH_LOCATION_LAT
+            lastLocationLon = APP_LAUNCH_LOCATION_LON
+
+            noiseSettings = initializeMeasurementSettings()
+            phoneSettings = initializeMeasurementSettings()
+            wifiSettings = initializeMeasurementSettings()
+
         }.build()
 
     override suspend fun readFrom(input: InputStream): AppSettings {
@@ -38,18 +41,18 @@ class AppSettingsSerializer() : Serializer<AppSettings> {
     }
 }
 
-fun MeasurementSettingsPopulatedDefaultInstance() : MeasurementSettings {
-    return MeasurementSettings.getDefaultInstance().toBuilder().apply {
-        freshness = Date().time
-        oldness = Date().time - 86400
-        msrsToTake = 10
-        periodicity = 5
-    }.build()
-}
-
 operator fun NetworkMode.not() : NetworkMode{
     return if(this == NetworkMode.ONLINE)
         NetworkMode.OFFLINE
     else
         NetworkMode.ONLINE
+}
+
+fun ZonedDateTime.toEpochMillis() = toInstant().toEpochMilli()
+
+fun Long.toZoneDateTime(): ZonedDateTime = runCatching {
+    ZonedDateTime.ofInstant(Instant.ofEpochMilli(this), ZoneId.systemDefault())
+}.getOrElse { e ->
+ e.printStackTrace()
+    ZonedDateTime.now()
 }

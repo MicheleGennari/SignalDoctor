@@ -3,7 +3,6 @@ package com.example.signaldoctor.workers
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.ServiceInfo
-import android.location.Location
 import android.net.ConnectivityManager
 import android.net.ConnectivityManager.NetworkCallback
 import android.net.Network
@@ -24,6 +23,7 @@ import androidx.work.workDataOf
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.FlowLocationProvider
+import com.example.signaldoctor.appComponents.isLocationPermissionGranted
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.mapUtils.CoordConversions.tileIndexFromLocation
@@ -31,27 +31,20 @@ import com.example.signaldoctor.realtimeFirebase.WifiMeasurementFirebase
 import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.WiFIMeasurement
-import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.google.android.gms.location.Priority
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.osmdroid.views.MapView
 import java.io.IOException
-import java.util.Date
-import java.util.UUID
-import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class WifiMsrWorker @AssistedInject constructor(
-    @Assisted ctx: Context,
+    @Assisted private val ctx: Context,
     @Assisted params: WorkerParameters,
     private val appSettings: DataStore<AppSettings>,
     private val msrsRepo: MsrsRepo,
@@ -62,19 +55,31 @@ class WifiMsrWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
 
-        try{
-            setForeground(getForegroundInfo())
-        } catch (e : IllegalStateException) {
-            Log.e("WIFI MEASUREMENT WORKER ERROR", "Can't run as foreground service due to restrictions")
-            e.printStackTrace()
-        }
-        return when{
 
-            Build.VERSION.SDK_INT<Build.VERSION_CODES.S -> wifiWorkOlderBuilds(applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
+        return if (!ctx.isLocationPermissionGranted()) Result.failure() else {
 
-            Build.VERSION.SDK_INT>=Build.VERSION_CODES.S -> wifiWorkNewerBuilds(applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
+            try {
+                setForeground(getForegroundInfo())
+            } catch (e: IllegalStateException) {
+                Log.e(
+                    "WIFI MEASUREMENT WORKER ERROR",
+                    "Can't run as foreground service due to restrictions"
+                )
+                e.printStackTrace()
+            }
 
-            else -> Result.failure()
+            when {
+                Build . VERSION . SDK_INT < Build . VERSION_CODES . S -> wifiWorkOlderBuilds(
+                    applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                )
+
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> wifiWorkNewerBuilds(
+                    applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                )
+
+                else -> Result.failure()
+            } //end when
+
         }
     }
 

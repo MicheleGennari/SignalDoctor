@@ -5,5 +5,5 @@ enum class Measure{
     sound,
     phone,
     wifi
-}
 
+}

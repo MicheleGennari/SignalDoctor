@@ -4,7 +4,7 @@
     <string name="measurements_channel_name">Measurements</string>
     <string name="measurement_channel_description">Notifications about measurements states,\nvalues and results.</string>
 
-    <string name="run_measurement_notification_title"> No %1$s measurement taken today</string>
+    <string name="run_measurement_notification_title"> No fresh %1$s measurement</string>
     <string name="run_measurement_notification_description">It\'s been a long time since you measured the current area. Do you want to run a measurement? </string>
     <string name="run_measurement_notification_action"> Run measurement </string>
 

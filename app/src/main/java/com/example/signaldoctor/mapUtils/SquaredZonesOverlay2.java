@@ -565,3 +565,4 @@ public class SquaredZonesOverlay2 extends Overlay implements IOverlayMenuProvide
         return mTileStates;
     }
 }
+

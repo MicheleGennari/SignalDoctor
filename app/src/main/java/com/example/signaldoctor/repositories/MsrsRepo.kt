@@ -66,6 +66,13 @@ class MsrsRepo @Inject constructor(
     fun getWifiOnlineAvgs(settings: MeasurementSettings) = onlineDB.avgsMap(Measure.wifi, settings)
 
 
+    fun getOldestDate(msrType: Measure) = combine(
+        localDB.getOldestDate(msrType),
+        onlineDB.getOldestDate(msrType)
+    ) { date, date2 ->
+        minOf(date,date2)
+    }
+
     fun countLocalMeasurements(msrType : Measure, userLocation : Location, limitDate: Date) : Flow<Boolean>{
         return localDB.countMeasurements(msrType, userLocation, limitDate)
     }

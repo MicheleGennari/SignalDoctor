@@ -245,3 +245,10 @@ class SquaredZonesOverlayKt @JvmOverloads constructor(
         val INVERT_COLORS: ColorFilter = ColorMatrixColorFilter(negate)
     }
 }
+/*
+fun Number.msrColor(msrType: Measure)= when(msrType){
+    Measure.phone->
+    Measure.wifi->
+    Measure.sound->
+}*/
+

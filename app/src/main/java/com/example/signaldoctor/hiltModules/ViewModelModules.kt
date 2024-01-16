@@ -6,7 +6,12 @@ import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.telephony.TelephonyManager
 import androidx.core.app.NotificationManagerCompat
+import androidx.datastore.core.DataStore
+import androidx.datastore.core.DataStoreFactory
 import androidx.work.WorkManager
+import com.example.signaldoctor.LocalHints
+import com.example.signaldoctor.utils.AppSettingsSerializer
+import com.example.signaldoctor.utils.LocalHintsSerializer
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.SettingsClient
@@ -19,6 +24,8 @@ import dagger.hilt.android.scopes.ViewModelScoped
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.views.MapView
 import javax.inject.Qualifier
+
+const val localHintsFileName = "localHints.pb"
 
 
 @Qualifier

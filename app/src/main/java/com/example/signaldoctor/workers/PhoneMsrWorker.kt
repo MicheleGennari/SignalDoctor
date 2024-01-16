@@ -17,6 +17,7 @@ import androidx.work.workDataOf
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.FlowLocationProvider
+import com.example.signaldoctor.appComponents.isLocationPermissionGranted
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.realtimeFirebase.PhoneMeasurementFirebase
@@ -43,16 +44,24 @@ class PhoneMsrWorker @AssistedInject constructor(
 
 
     override suspend fun doWork() : Result{
-        try{
-            setForeground(getForegroundInfo())
-        }catch(e: IllegalStateException){
-            Log.e("PHONE MEASUREMENT WORKER ERROR", "Can't run as foreground services due to restrictions")
-            e.printStackTrace()
+
+
+        return if(!ctx.isLocationPermissionGranted()) Result.failure() else  {
+
+            try{
+                setForeground(getForegroundInfo())
+            }catch(e: IllegalStateException){
+                Log.e("PHONE MEASUREMENT WORKER ERROR", "Can't run as foreground services due to restrictions")
+                e.printStackTrace()
+            }
+
+            phoneWorkNewerBuilds(
+                ctx,
+                ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            )
         }
 
-        return phoneWorkNewerBuilds(ctx, ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager)
-
-        }
+    }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
 

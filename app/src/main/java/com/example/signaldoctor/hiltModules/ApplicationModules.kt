@@ -1,11 +1,13 @@
 package com.example.signaldoctor.hiltModules
 
 import android.content.Context
+import android.location.Geocoder
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.room.Room
 import androidx.work.WorkManager
 import com.example.signaldoctor.AppSettings
+import com.example.signaldoctor.LocalHints
 import com.example.signaldoctor.contracts.FirebaseContracts
 import com.example.signaldoctor.localDatabase.IMsrsLocalDB
 import com.example.signaldoctor.localDatabase.RoomDBImpl
@@ -13,6 +15,7 @@ import com.example.signaldoctor.onlineDatabase.RealtimeDBImpl
 import com.example.signaldoctor.onlineDatabase.IMsrsOnlineDB
 import com.example.signaldoctor.room.MsrsDB
 import com.example.signaldoctor.utils.AppSettingsSerializer
+import com.example.signaldoctor.utils.LocalHintsSerializer
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.SettingsClient
@@ -27,6 +30,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.scopes.ViewModelScoped
 import dagger.hilt.components.SingletonComponent
+import org.osmdroid.bonuspack.location.GeocoderNominatim
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -39,14 +43,11 @@ annotation class RealtimeFirebase
 annotation class DefaultLocalDB
 
 const val dataStoresDir = "datastore"
-const val settingsDataStoreFileName = "Settings.pb"
 const val appSettingsDataStoreFileName = "AppSettings.pb"
 
 @Module
 @InstallIn(SingletonComponent::class)
 class ApplicationModules {
-
-
 
     @Singleton
     @Provides
@@ -72,6 +73,15 @@ class ApplicationModules {
         return DataStoreFactory.create(
             serializer = AppSettingsSerializer(),
             produceFile = { app.filesDir.resolve("$dataStoresDir/$appSettingsDataStoreFileName") }
+        )
+    }
+
+    @Singleton
+    @Provides
+    fun provideLocalHints(@ApplicationContext app : Context) : DataStore<LocalHints>{
+        return DataStoreFactory.create(
+            serializer = LocalHintsSerializer(),
+            produceFile = { app.filesDir.resolve("$dataStoresDir/$localHintsFileName") }
         )
     }
 

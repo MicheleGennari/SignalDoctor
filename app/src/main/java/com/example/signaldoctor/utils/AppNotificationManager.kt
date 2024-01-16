@@ -18,6 +18,7 @@ import com.example.signaldoctor.broadcastReceivers.RUN_MEASUREMENT_ACTION
 import com.example.signaldoctor.broadcastReceivers.RunMeasurementReceiver
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.room.MeasurementBase
+import com.example.signaldoctor.screens.launchToast
 import com.example.signaldoctor.screens.msrTypeWhen
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -41,7 +42,7 @@ class AppNotificationManager @Inject constructor(
         )
     }
 
-    fun createMeasurementsChannel(
+    private fun createMeasurementsChannel(
         channelNameResourceId : Int,
         channelDescriptionResourceId : Int
     ){
@@ -96,6 +97,10 @@ class AppNotificationManager @Inject constructor(
                 )
                 .build()
         )
+    }
+
+    fun launchToast(resId : Int? = null , message : String) {
+        context.launchToast(resId, message)
     }
 
     fun cancelRunMeasurementNotification(msrType: Measure){

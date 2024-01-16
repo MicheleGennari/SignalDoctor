@@ -21,6 +21,9 @@ abstract class SoundMeasurementDAO : BaseMsrsDAO<SoundMeasurement>() {
     @Query("SELECT COUNT(tile_index) FROM phone_table WHERE :currentTile <= tile_index AND date >= :oldness")
     abstract fun countMeasures(currentTile : Long, oldness: Date) : Flow<Int>
 
+    @Query("SELECT MIN(date) FROM sound_table")
+    abstract fun getOldestDate() : Flow<Date>
+
     @MapInfo(keyColumn = TableColumn.tile_index, valueColumn = TableColumn.value)
     @Query("SELECT tile_index, AVG(value) AS value FROM sound_table " +
             "WHERE date >= :oldness OR :oldness IS NULL AND date <= :freshness OR :freshness IS NULL " +
