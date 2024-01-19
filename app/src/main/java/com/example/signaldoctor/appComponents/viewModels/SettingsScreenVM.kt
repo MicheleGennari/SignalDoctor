@@ -8,7 +8,9 @@ import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.appComponents.FlowLocationProvider
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.screens.msrTypeWHen
+import com.example.signaldoctor.services.BackgroundMeasurementsManager
 import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.catchIOException
 import com.example.signaldoctor.utils.noiseSettings
 import com.example.signaldoctor.utils.phoneSettings
 import com.example.signaldoctor.utils.updateAppSettings
@@ -16,8 +18,11 @@ import com.example.signaldoctor.utils.wifiSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -26,7 +31,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsScreenVM @Inject constructor(
     private val userSettings: DataStore<AppSettings>,
-    pri
+    private val backgroundMeasurementsManager : BackgroundMeasurementsManager
 ) : ViewModel() {
 
 
@@ -65,26 +70,7 @@ class SettingsScreenVM @Inject constructor(
                 wifi = { wifiSettings(updater) }
             )
         }
-        /*
-        viewModelScope.launch {
-            userSettings.updateData { oldSettingsSnap ->
-                oldSettingsSnap.updateAppSettings {
-                    msrTypeWHen(
-                        msrType,
-                        phone = {
-                            phoneSettings(updater)
-                        },
-                        wifi = {
-                            wifiSettings(updater)
-                        },
-                        sound = {
-                            noiseSettings(updater)
-                        }
-                    )
-                }
-            }
-        }
-         */
+
     }
 
     fun updateNoiseSettings(updater: MeasurementSettings.Builder.() -> Unit){
@@ -99,12 +85,29 @@ class SettingsScreenVM @Inject constructor(
         updateMeasureSettings(msrType = Measure.wifi, updater = updater)
     }
 
+    //value in this stateFlow tells whether service is active or not
+    fun startBackgroundMeasurementsManager() =
+        combine(
+            userSettings.data.catchIOException().map { it.phoneSettings.isBackgroundMsrOn }.distinctUntilChanged(),
+            userSettings.data.catchIOException().map { it.noiseSettings.isBackgroundMsrOn }.distinctUntilChanged(),
+            userSettings.data.catchIOException().map { it.wifiSettings.isBackgroundMsrOn }.distinctUntilChanged()
+        ) { isPhoneBackgroundOn, isNoiseBackgroundOn, isWIfiBackgroundOn ->
+            if (isPhoneBackgroundOn || isNoiseBackgroundOn || isWIfiBackgroundOn) {
+                backgroundMeasurementsManager.start()
+                true
+            } else false
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     override fun onCleared() {
         consoledebug("the Settings Screen ViewModel is now cleared")
         super.onCleared()
     }
 
     init {
+
         consoledebug("A Settings Screen ViewModel is now created")
+
+        startBackgroundMeasurementsManager()
+
     }
 }

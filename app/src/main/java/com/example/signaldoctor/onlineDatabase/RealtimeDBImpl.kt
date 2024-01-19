@@ -1,13 +1,18 @@
 package com.example.signaldoctor.onlineDatabase
 
 import android.location.Location
+import androidx.core.util.rangeTo
 import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.Settings
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MsrsMap
 import com.example.signaldoctor.mapUtils.CoordConversions.tileIndexFromLocation
+import com.example.signaldoctor.realtimeFirebase.PhoneMeasurementFirebase
+import com.example.signaldoctor.realtimeFirebase.SoundMeasurementFirebase
+import com.example.signaldoctor.realtimeFirebase.WifiMeasurementFirebase
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.PhoneMeasurement
+import com.example.signaldoctor.room.RoomMeasurementEntity
 import com.example.signaldoctor.room.SoundMeasurement
 import com.example.signaldoctor.room.WiFIMeasurement
 import com.example.signaldoctor.screens.msrTypeWhen
@@ -71,12 +76,17 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
 
     }
 
+
+    //function that takes only the first msrsToTake measurements if useMsrsToTake is true
+    private fun <T> List<T>.msrsToTake(settings: MeasurementSettings) = apply { if (settings.useMsrsToTake) take(settings.msrsToTake) }
+
+    private fun MeasurementBase.isInTimeRange(settings: MeasurementSettings) = Date(settings.oldness).rangeTo(Date(settings.freshness)).contains(this.date)
+
     private fun phoneMsrsFilter(settings: MeasurementSettings) : List<PhoneMeasurement>.() -> List<PhoneMeasurement> {
         return  {
             filter { phoneMeasurement ->
-                    true
-                }
-                .take(settings.msrsToTake)
+                    phoneMeasurement.firebaseTable.baseInfo.isInTimeRange(settings)
+                }.msrsToTake(settings)
         }
     }
 
@@ -85,38 +95,12 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
     }
 
 
-        /* callbackFlow {
-        val path = db.reference.child("measurements/phone")
-        lateinit var listener: ValueEventListener
-
-
-        try {
-
-            path.addValueEventListener(object : ValueEventListener{
-                override fun onDataChange(snapshot: DataSnapshot) {
-                   for(tile in snapshot.children){
-
-                   }
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    cancel("Realtime DB failed", IOException("RealtimeDB failed"))
-                }
-
-            })
-
-            awaitCancellation()
-        }finally {
-            path.removeEventListener(listener)
-        }
-    }
-*/
 
      private fun soundMsrsFilter(settings: MeasurementSettings) : List<SoundMeasurement>.() -> List<SoundMeasurement>{
         return {
             filter { soundMeasurement ->
-                true
-            }.take(settings.msrsToTake)
+                soundMeasurement.firebaseTable.baseInfo.isInTimeRange(settings)
+            }.msrsToTake(settings)
         }
     }
     override fun getSoundMsrs(settings: MeasurementSettings): Flow<List<SoundMeasurement>> {
@@ -127,8 +111,8 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
     private fun wifiMsrsFilter(settings: MeasurementSettings) : List<WiFIMeasurement>.() -> List<WiFIMeasurement> {
         return {
             filter {  wifiMeasurement->
-                true
-            }.take(settings.msrsToTake)
+                wifiMeasurement.firebaseTable.baseInfo.isInTimeRange(settings)
+            }.msrsToTake(settings)
         }
     }
 
@@ -146,7 +130,9 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
     ).snapshots.flowOn(Dispatchers.IO).map { tileIndexes ->
         tileIndexes.children.flatMap { tileIndexMsrs ->
             tileIndexMsrs.children.mapNotNull { measurement ->
-                measurement.getValue<MeasurementBase>()?.date
+
+
+                measurement.getValue<@JvmSuppressWildcards MeasurementBase>()?.date
             }
         }.min()
     }.flowOn(Dispatchers.Default)
@@ -165,11 +151,15 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
 
             }).orderByKey().startAt("$currentTileIndex").snapshots.flowOn(Dispatchers.IO).map { tileIndexesSnap ->
                 tileIndexesSnap.children.flatMap { tileIndexSnap ->
-                    tileIndexesSnap.children
+                    tileIndexSnap.children
                 }
         }.map { measurementsSnap ->
             measurementsSnap.mapNotNull { measurementSnap ->
-                measurementSnap.getValue<MeasurementBase>()
+                msrTypeWhen(msrType,
+                    phone =  measurementSnap.getValue<PhoneMeasurement>()?.firebaseTable?.baseInfo,
+                    sound =  measurementSnap.getValue<SoundMeasurement>()?.firebaseTable?.baseInfo,
+                    wifi =  measurementSnap.getValue<WiFIMeasurement>()?.firebaseTable?.baseInfo
+                    )
             }.count { measurement ->
                 measurement.date.after(limitDate)
             } <1
@@ -177,9 +167,18 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
     }
 
 
+    private inline fun <reified T : RoomMeasurementEntity> postMsr(msr : T) : Boolean{
+        val dbTileIndex = msr.firebaseTable.baseInfo.tileIndex
+        val uuid = msr.firebaseTable.baseInfo.uuid
+        db.reference.child("measurements/phone").child("$dbTileIndex").child("$uuid")//.push()
+            .setValue(msr)
+        return true
+    }
+
 
     override fun postPhoneMsr(phoneMeasurement: PhoneMeasurement): Boolean {
         val dbTileIndex = phoneMeasurement.firebaseTable.baseInfo.tileIndex
+        val uuid = phoneMeasurement.firebaseTable.baseInfo.uuid
         db.reference.child("measurements/phone").child("$dbTileIndex").push()
             .setValue(phoneMeasurement)
         return true
@@ -187,6 +186,7 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
 
     override fun postSoundMsr(soundMeasurement: SoundMeasurement): Boolean {
         val dbTileIndex = soundMeasurement.firebaseTable.baseInfo.tileIndex
+        val uuid = soundMeasurement.firebaseTable.baseInfo.uuid
         db.reference.child("measurements/sound").child("$dbTileIndex").push()
             .setValue(soundMeasurement)
         return true
@@ -194,6 +194,7 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
 
     override fun postWifiMsr(wifiMeasurement: WiFIMeasurement): Boolean {
         val dbTileIndex = wifiMeasurement.firebaseTable.baseInfo.tileIndex
+        val uuid = wifiMeasurement.firebaseTable.baseInfo.uuid
         db.reference.child("measurements/wifi").child("$dbTileIndex").push()
             .setValue(wifiMeasurement)
         return true

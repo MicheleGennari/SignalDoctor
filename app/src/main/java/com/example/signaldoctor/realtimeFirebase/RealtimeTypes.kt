@@ -7,11 +7,12 @@ import com.example.signaldoctor.room.TableColumn
 
 data class PhoneMeasurementFirebase(
 
-    @Embedded
-    val baseInfo : MeasurementBase = MeasurementBase(),
-    @ColumnInfo(name= TableColumn.is_lte) val isLTE : Boolean? = null
+    @ColumnInfo(name= TableColumn.is_lte) val isLTE : Boolean? = null,
 
-    )
+    @Embedded
+    override val baseInfo: MeasurementBase = MeasurementBase()
+
+) : FirebaseMeasurementEntity()
 
 data class SoundMeasurementFirebase(
 
@@ -23,4 +24,9 @@ data class WifiMeasurementFirebase(
 
     @Embedded
     val baseInfo : MeasurementBase = MeasurementBase(),
+)
+
+open class FirebaseMeasurementEntity(
+    @Embedded
+    open val baseInfo: MeasurementBase = MeasurementBase()
 )

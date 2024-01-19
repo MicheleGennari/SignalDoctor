@@ -40,7 +40,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,16 +54,16 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
-import androidx.core.content.IntentCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.R
+import com.example.signaldoctor.appComponents.viewModels.MyViewModel
 import com.example.signaldoctor.appComponents.viewModels.SettingsScreenVM
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.services.BackgroundMeasurementsService
 import com.example.signaldoctor.services.DURATION_KEY
-import com.example.signaldoctor.services.RUN_BACKGROUND_ACTION
+import com.example.signaldoctor.services.START_BACKGROUND_ACTION
 import com.example.signaldoctor.services.STOP_BACKGROUND_ACTION
 import com.example.signaldoctor.ui.theme.SignalDoctorTheme
 import com.example.signaldoctor.utils.Loggers.consoledebug
@@ -89,19 +88,20 @@ import kotlin.math.roundToInt
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
-    viewModel: SettingsScreenVM = hiltViewModel(),
+    settingsScreenVM: SettingsScreenVM = hiltViewModel(),
     onNavigationBack : () -> Unit = {}
 ){
+
 
     val recordPermission = rememberPermissionState(permission = android.Manifest.permission.RECORD_AUDIO)
 
     val locationPermission = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION)
 
-    val phoneSettings by viewModel.phoneSettings.collectAsStateWithLifecycle()
+    val phoneSettings by settingsScreenVM.phoneSettings.collectAsStateWithLifecycle()
 
-    val noiseSettings by viewModel.noiseSettings.collectAsStateWithLifecycle()
+    val noiseSettings by settingsScreenVM.noiseSettings.collectAsStateWithLifecycle()
 
-    val wifiSettings by viewModel.wifiSettings.collectAsStateWithLifecycle()
+    val wifiSettings by settingsScreenVM.wifiSettings.collectAsStateWithLifecycle()
 
     var currentSettingsList by remember{ mutableStateOf(Measure.sound) }
 
@@ -138,12 +138,12 @@ fun SettingsScreen(
                     )
                 },
                 onUseMsrsToTakeChange = {
-                    viewModel.updateMeasureSettings(currentSettingsList){
+                    settingsScreenVM.updateMeasureSettings(currentSettingsList){
                         useMsrsToTake = it
                     }
                 },
                 onMsrsToTakeChange = {
-                    viewModel.updateMeasureSettings(currentSettingsList){
+                    settingsScreenVM.updateMeasureSettings(currentSettingsList){
                         msrsToTake = it
                     }
                 },
@@ -154,7 +154,7 @@ fun SettingsScreen(
 
                     if(locationPermission.status.isGranted){
                         if(currentSettingsList != Measure.sound || recordPermission.status.isGranted)
-                            viewModel.updateMeasureSettings(currentSettingsList) {
+                            settingsScreenVM.updateMeasureSettings(currentSettingsList) {
                                 isBackgroundMsrOn = it
                             }
                         else recordPermission.launchPermissionRequest()
@@ -171,12 +171,12 @@ fun SettingsScreen(
                     */
                 },
                 onPeriodicityChange = {
-                    viewModel.updateMeasureSettings(currentSettingsList){
+                    settingsScreenVM.updateMeasureSettings(currentSettingsList){
                         periodicity = it
                     }
                 },
                 onFreshnessChange = {
-                    viewModel.updateMeasureSettings(currentSettingsList){
+                    settingsScreenVM.updateMeasureSettings(currentSettingsList){
                         consoledebug("Updating freshness...")
                         consoledebug("freshness was ${freshness.toZoneDateTime()}")
                         freshness = it
@@ -184,7 +184,7 @@ fun SettingsScreen(
                     }
                 },
                 onOldnessChange = {
-                    viewModel.updateMeasureSettings(currentSettingsList){
+                    settingsScreenVM.updateMeasureSettings(currentSettingsList){
                         oldness = it
                     }
                 }
@@ -535,7 +535,8 @@ fun PickerToggableDialog(
     title: String = "date picker",
     dateValidator : (Long) -> Boolean = {true},
     date : Long? = Instant.now().toEpochMilli(),
-    onDateChange : (Long) -> Unit = {}
+    onDateChange : (Long) -> Unit = {},
+    showModeToggle : Boolean = false
 ){
 
 
@@ -580,10 +581,10 @@ fun PickerToggableDialog(
                 verticalAlignment = Alignment.Top
             ){
                 DatePicker(
-                    modifier = Modifier.fillMaxWidth(9 / 10f),
+                    modifier = Modifier,
                     state = pickerState,
                     title = null,
-                    headline = null,
+                    headline = { Text(text = title) },
                     showModeToggle = false,
                     dateValidator = { newDate: Long ->
                         consoledebug("inside date validator")
@@ -591,15 +592,17 @@ fun PickerToggableDialog(
                         true
                     }
                 )
-                IconButton(
-                    modifier = Modifier,
-                    onClick = {
-                    pickerState.displayMode = DisplayMode.Picker
-                }) {
-                    Icon(
-                        imageVector = Icons.Default.DateRange,
-                        contentDescription = "open date picker"
-                    )
+                if(showModeToggle){
+                    IconButton(
+                        modifier = Modifier,
+                        onClick = {
+                            pickerState.displayMode = DisplayMode.Picker
+                        }) {
+                        Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = "open date picker"
+                        )
+                    }
                 }
             }
         }
@@ -708,7 +711,7 @@ fun OutlinedDateBox(
 fun startBackgroundMeasurement(msrType : Measure, minutes : Long = 15L) : ComponentName?{
 
     val intent = Intent(LocalContext.current.applicationContext, BackgroundMeasurementsService::class.java).apply {
-        action = RUN_BACKGROUND_ACTION
+        action = START_BACKGROUND_ACTION
         putExtra(msrType.name, msrType.ordinal)
         putExtra(DURATION_KEY, minutes)
     }

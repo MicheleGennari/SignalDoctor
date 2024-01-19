@@ -4,6 +4,8 @@ import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.NetworkMode
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -46,6 +48,12 @@ operator fun NetworkMode.not() : NetworkMode{
         NetworkMode.OFFLINE
     else
         NetworkMode.ONLINE
+}
+
+fun Flow<AppSettings>.catchIOException() = apply {
+    catch {
+        emit(AppSettings.getDefaultInstance())
+    }
 }
 
 fun ZonedDateTime.toEpochMillis() = toInstant().toEpochMilli()

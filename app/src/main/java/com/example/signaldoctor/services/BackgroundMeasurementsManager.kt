@@ -12,10 +12,27 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-abstract class BackgroundMeasurementsManager @Inject constructor(
+class BackgroundMeasurementsManager @Inject constructor(
     @ApplicationContext private val app : Context
 ) {
+    fun start() =
+        sendStartCommand(
+            Intent(app, BackgroundMeasurementsService::class.java)
+                .setAction(START_BACKGROUND_ACTION)
+        )
 
+    fun stop(){
+        sendStartCommand(
+            Intent(app, BackgroundMeasurementsService::class.java)
+                .setAction(START_BACKGROUND_ACTION)
+        )
+    }
+
+    fun forceStop(){
+        app.stopService(Intent(app, BackgroundMeasurementsService::class.java))
+    }
+
+    /*
     private var isSoundOn = false
     private var isPhoneOn = false
     private var isWifiOn = false
@@ -29,7 +46,7 @@ abstract class BackgroundMeasurementsManager @Inject constructor(
         }
 
         val intent = Intent(app, BackgroundMeasurementsService::class.java).apply {
-            action = RUN_BACKGROUND_ACTION
+            action = START_BACKGROUND_ACTION
             putExtra(msrType.name, msrType.ordinal)
             putExtra(DURATION_KEY, minutes)
         }
@@ -72,7 +89,7 @@ abstract class BackgroundMeasurementsManager @Inject constructor(
         shutdownIdleService()
 
     }
-
+ */
     private fun sendStartCommand(intent : Intent) : ComponentName? = try{
         (
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
@@ -87,6 +104,7 @@ abstract class BackgroundMeasurementsManager @Inject constructor(
     }
 
 
+    /*
     private fun shutdownIdleService(){
         try{
             if (!(isSoundOn || isPhoneOn || isWifiOn))
@@ -101,5 +119,7 @@ abstract class BackgroundMeasurementsManager @Inject constructor(
         sound = isSoundOn,
         wifi = isWifiOn
     )
+
+    */
 
 }

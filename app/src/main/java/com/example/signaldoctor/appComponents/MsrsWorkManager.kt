@@ -1,7 +1,5 @@
 package com.example.signaldoctor.appComponents
 
-import android.location.Location
-import androidx.lifecycle.LiveData
 import androidx.lifecycle.asFlow
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -10,23 +8,13 @@ import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import androidx.work.workDataOf
-import com.example.signaldoctor.appComponents.viewModels.POST_MSR_WORK_TAG
 import com.example.signaldoctor.contracts.Measure
-import com.example.signaldoctor.mapUtils.CoordConversions.tileIndexFromLocation
-import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.screens.msrTypeWhen
-import com.example.signaldoctor.utils.Loggers
-import com.example.signaldoctor.workers.MsrWorkersInputData
 import com.example.signaldoctor.workers.NoiseMsrWorker
 import com.example.signaldoctor.workers.PhoneMsrWorker
-import com.example.signaldoctor.workers.PostMsrWorker
 import com.example.signaldoctor.workers.WifiMsrWorker
-import dagger.hilt.android.scopes.ActivityRetainedScoped
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
-import org.osmdroid.views.MapView
 import java.time.Duration
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -66,11 +54,11 @@ class MsrsWorkManager @Inject constructor(private val workManager: WorkManager) 
         return workManager.getWorkInfosForUniqueWorkLiveData(msrType.name).asFlow().map { it.first() }
     }
 
-    fun runBackgroundMeasurmeent(msrType: Measure, interval: Duration) : Flow<WorkInfo> {
+    fun runBackgroundMeasurement(msrType: Measure, interval: Duration) : Flow<WorkInfo> {
 
         val workName = msrType.name+"_background"
 
-        val getMsrWorkRequest = msrTypeWhen( msrType,
+        val periodicMsrWorkRequest = msrTypeWhen( msrType,
             phone = PeriodicWorkRequestBuilder<PhoneMsrWorker>(interval),
             sound = PeriodicWorkRequestBuilder<NoiseMsrWorker>(interval),
             wifi = PeriodicWorkRequestBuilder<WifiMsrWorker>(interval)
@@ -85,7 +73,7 @@ class MsrsWorkManager @Inject constructor(private val workManager: WorkManager) 
         workManager.enqueueUniquePeriodicWork(
             workName,
             ExistingPeriodicWorkPolicy.UPDATE,
-            getMsrWorkRequest
+            periodicMsrWorkRequest
         )
 
         return workManager.getWorkInfosForUniqueWorkLiveData(workName).asFlow().map { it.first() }

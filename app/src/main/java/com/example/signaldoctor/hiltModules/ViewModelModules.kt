@@ -1,20 +1,10 @@
 package com.example.signaldoctor.hiltModules
 
 import android.content.Context
-import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.telephony.TelephonyManager
 import androidx.core.app.NotificationManagerCompat
-import androidx.datastore.core.DataStore
-import androidx.datastore.core.DataStoreFactory
-import androidx.work.WorkManager
-import com.example.signaldoctor.LocalHints
-import com.example.signaldoctor.utils.AppSettingsSerializer
-import com.example.signaldoctor.utils.LocalHintsSerializer
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.SettingsClient
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

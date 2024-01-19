@@ -58,7 +58,7 @@ class MapScreenUiState @Inject constructor(
     }
 
 
-    private val _centerOnScreenLocation = MutableStateFlow(true)
+    private val _centerOnScreenLocation = MutableStateFlow(false)
     val centerOnScreenLocation = _centerOnScreenLocation.asStateFlow()
 
     fun setCenterOnScreenLocation(newValue : Boolean){

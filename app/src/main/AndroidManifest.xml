@@ -24,20 +24,27 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SignalDoctor"
+        android:enableOnBackInvokedCallback="true"
         tools:targetApi="33">
         <activity
             android:name=".appComponents.MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
             android:theme="@style/Theme.SignalDoctor">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <data android:scheme="navigation" android:host="signal_doctor"/>
+            </intent-filter>
+
         </activity>
 
-        <service android:name=".services.BackgroundMeasurementsService"/>
+        <service android:name=".services.BackgroundMeasurementsService"
+            android:foregroundServiceType="microphone|location"/>
 
         <service android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="microphone|shortService"

@@ -1,11 +1,28 @@
 package com.example.signaldoctor.utils
 
+import android.util.Log
 import androidx.datastore.core.DataStore
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.utils.Loggers.consoledebug
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import java.io.IOException
 import java.util.Date
 
+
+fun DataStore<AppSettings>.update( coroutineScope : CoroutineScope, updater : AppSettings.Builder.() -> Unit){
+    coroutineScope.launch {
+        try{
+            updateData { appSettings ->
+                appSettings.updateAppSettings(updater)
+            }
+        }catch (e : Exception){
+            Log.e("AppSettings Datastore", "Something went wrong while writing on disk")
+            e.printStackTrace()
+        }
+    }
+}
 
 fun AppSettings.updateAppSettings(
     update : AppSettings.Builder.() -> Unit

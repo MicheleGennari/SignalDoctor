@@ -3,11 +3,11 @@ package com.example.signaldoctor.appComponents.viewModels
 import android.location.Location
 import android.util.Log
 import androidx.datastore.core.DataStore
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkInfo
 import com.example.signaldoctor.AppSettings
-import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.appComponents.FlowConnectivityManager
 import com.example.signaldoctor.appComponents.FlowLocationProvider
@@ -15,6 +15,7 @@ import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.appComponents.MsrsWorkManager
 import com.example.signaldoctor.appComponents.PermissionsChecker
 import com.example.signaldoctor.appComponents.ReceiversManager
+import com.example.signaldoctor.contracts.DestinationsInfo
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
 import com.example.signaldoctor.contracts.MsrsMap
@@ -42,7 +43,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.combineTransform
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -76,6 +79,7 @@ const val MEASUREMENT_NOTIFICATION_CHANNEL_ID = "MEASUREMENT_CHANNEL"
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 open class MyViewModel @Inject constructor(
+    private val savedStateHandle: SavedStateHandle,
     private val settingsDataStore : DataStore<AppSettings>,
     private val msrsRepo: MsrsRepo,
     val mapScreenUiState: MapScreenUiState,
@@ -128,10 +132,10 @@ open class MyViewModel @Inject constructor(
 
         if (isBackgroundOn) {
             consoledebug("background ${msrType.name} activated")
-            runBackgroundMeasurement(msrType, Duration.ofMinutes(periodicity.toLong()))
+            //runBackgroundMeasurement(msrType, Duration.ofMinutes(periodicity.toLong()))
         } else {
             consoledebug("no ${msrType.name} background measurement")
-            cancelBackgroundMeasurement(msrType)
+            //cancelBackgroundMeasurement(msrType)
         }
         isBackgroundOn
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
@@ -195,8 +199,14 @@ open class MyViewModel @Inject constructor(
     val userLocation = _userLocation.asStateFlow()
 
     val localSearchBarHints = mapScreenUiState.localSearchBarHints.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
-    val searchBarHints = mapScreenUiState.searchBarHints.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
-
+    val searchBarHints = mapScreenUiState.searchBarHints.combine(localSearchBarHints){ onlineHints : List<ISearchBarHint>, localHints : List<ISearchBarHint> ->
+        onlineHints.filter { onlineHint ->
+            //only onlineHints that are not in localHints yet will pass the filter
+            !localHints.any { localHint ->
+                localHint.locationName == onlineHint.locationName
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
     /*
     val searchBarHints = mapScreenUiState.searchBarQuery.onEach {
@@ -218,6 +228,32 @@ open class MyViewModel @Inject constructor(
     val areNoiseMsrsDated = areMsrsDated(Measure.sound)
     val areWifiMsrsDated = areMsrsDated(Measure.wifi)
 
+    fun areMsrsDated(msrType: Measure) = combineTransform(
+        settingsDataStore.data.map { it.networkMode }.flowOn(Dispatchers.IO).distinctUntilChanged(),
+        userLocation.filterNotNull()
+    ){ networkMode, userLocation ->
+        emitAll(if (networkMode == NetworkMode.ONLINE) {
+            msrsRepo.countMergedMeasurements(
+                msrType,
+                userLocation,
+                Date(Instant.now().minus(Duration.ofDays(1)).toEpochMilli())
+            )
+        } else {
+            msrsRepo.countLocalMeasurements(
+                msrType,
+                userLocation,
+                Date(Instant.now().minus(Duration.ofDays(1)).toEpochMilli())
+            )
+        })
+    }.distinctUntilChanged().onEach { areMsrsDated ->
+        if (areMsrsDated)
+            sendDatedMeasurementNotification(msrType)
+        else
+            cancelDatedMeasurementNotification(msrType)
+    }.stateIn(viewModelScope, started = SharingStarted.WhileSubscribed(stopTimeoutMillis = Duration.ofMinutes(5).toMillis()), initialValue = false)
+
+
+    /*
     private fun areMsrsDated(msrType: Measure) = combine(
         settingsDataStore.data.map { it.networkMode }.flowOn(Dispatchers.IO),
         userLocation.filterNotNull(),
@@ -241,13 +277,19 @@ open class MyViewModel @Inject constructor(
                 Date(Instant.now().minus(Duration.ofDays(1)).toEpochMilli())
             )
         }
-    }.distinctUntilChanged().stateIn(viewModelScope, started = SharingStarted.WhileSubscribed(), initialValue = false)
+    }.distinctUntilChanged().onEach { areMsrsDated ->
+        if (areMsrsDated)
+            sendDatedMeasurementNotification(msrType)
+        else
+            cancelDatedMeasurementNotification(msrType)
+    }.stateIn(viewModelScope, started = SharingStarted.WhileSubscribed(stopTimeoutMillis = Duration.ofMinutes(5).toMillis()), initialValue = false)
+
+*/
 
      fun checkLocationSettings(mainActivity: MainActivity) = viewModelScope.launch {
             userLocation.value?.let { MapView.getTileSystem().tileIndexFromLocation(it )}
             locationProvider.checkLocationSettings(locationUpdateSettings, mainActivity)
     }
-
 
 
     fun locationUpdatesOn() {
@@ -361,7 +403,7 @@ open class MyViewModel @Inject constructor(
     }
 
     fun runBackgroundMeasurement(msrType: Measure, interval: Duration) {
-        msrsWorkManager.runBackgroundMeasurmeent(msrType, interval)
+        msrsWorkManager.runBackgroundMeasurement(msrType, interval)
             .onStart {
                 mapScreenUiState.changeMeasuringState(MeasuringState.BACKGROUND)
             }.onEach { workInfo ->
@@ -391,14 +433,16 @@ open class MyViewModel @Inject constructor(
 
     init{
 
-        viewModelScope.launch {
-            settingsDataStore.data.first().let {settingsSnap ->
-                mapScreenUiState.setScreenLocation(
-                    latitude = settingsSnap.lastLocationLat,
-                    longitude = settingsSnap.lastLocationLon
-                )
-            }
+        if(savedStateHandle.get<Boolean>(DestinationsInfo.MapScreen.CENTER_LOCATION_ARGUMENT_NAME) == true) {
 
+            viewModelScope.launch {
+                settingsDataStore.data.first().let { settingsSnap ->
+                    mapScreenUiState.setScreenLocation(
+                        latitude = settingsSnap.lastLocationLat,
+                        longitude = settingsSnap.lastLocationLon
+                    )
+                }
+            }
         }
 
         consoledebug("My ViewModel is Initialized")
@@ -433,12 +477,12 @@ open class MyViewModel @Inject constructor(
 
     }
 
-    fun sendRunMeasurementNotification(msrType: Measure){
+    fun sendDatedMeasurementNotification(msrType: Measure){
         consoledebug("inside sendRunMeasurementNotification()")
         notificationManager.sendRunMeasurementNotification(msrType)
     }
 
-    fun cancelRunMeasurementNotification(msrType: Measure){
+    fun cancelDatedMeasurementNotification(msrType: Measure){
         notificationManager.cancelRunMeasurementNotification(msrType)
     }
 

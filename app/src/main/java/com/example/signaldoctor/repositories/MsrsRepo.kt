@@ -17,6 +17,9 @@ import com.example.signaldoctor.utils.Loggers.consoledebug
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import java.lang.IllegalStateException
 import java.util.Date
 import javax.inject.Inject
@@ -74,15 +77,23 @@ class MsrsRepo @Inject constructor(
     }
 
     fun countLocalMeasurements(msrType : Measure, userLocation : Location, limitDate: Date) : Flow<Boolean>{
-        return localDB.countMeasurements(msrType, userLocation, limitDate)
+        return localDB.countMeasurements(msrType, userLocation, limitDate).onEach {
+            consoledebug("countLocalMeasurements running")
+        }.onStart {
+            consoledebug("countLocalMeasurements has started")
+        }
     }
 
     fun countMergedMeasurements(msrType: Measure, userLocation : Location, limitDate: Date) : Flow<Boolean>{
         return countLocalMeasurements(msrType, userLocation, limitDate)
             .combine(onlineDB.countMeasurements(msrType, userLocation, limitDate)) { areLocalMsrsDated, areOnlineMsrsDated ->
+                consoledebug("countMergedMeasurements running ")
+
                 //consoledebug("areLocalMsrsDated? $areLocalMsrsDated")
                 //consoledebug("areOnlineMsrsDated? $areOnlineMsrsDated")
                 areLocalMsrsDated && areOnlineMsrsDated
+            } .onStart {
+                consoledebug("countMergedMeasurements has started")
             }
     }
 

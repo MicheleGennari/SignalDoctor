@@ -2,7 +2,6 @@ package com.example.signaldoctor.screens
 
 import android.content.Context
 import android.content.res.Resources.NotFoundException
-import android.location.Address
 import android.location.Location
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
@@ -24,21 +23,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeContent
-import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.foundation.layout.safeGesturesPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
@@ -70,7 +60,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -86,12 +75,12 @@ import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.signaldoctor.LocalHint
 import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.CHANGE_LOCATION_SETTINGS
 import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.appComponents.viewModels.MyViewModel
+import com.example.signaldoctor.appComponents.viewModels.SettingsScreenVM
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
 import com.example.signaldoctor.contracts.MsrsMap
@@ -117,6 +106,7 @@ import org.osmdroid.views.MapView
 fun MapScreen(
     modifier: Modifier = Modifier,
     viewModel: MyViewModel = hiltViewModel(),
+    settingsScreenVM: SettingsScreenVM = hiltViewModel(),
     navigateToSettings : () -> Unit = {}
     ){
     SignalDoctorTheme {
@@ -157,22 +147,11 @@ fun MapScreen(
 
 
         val arePhoneMsrsDated by viewModel.arePhoneMsrsDated.collectAsStateWithLifecycle()
-        LaunchedEffect(arePhoneMsrsDated){
-            if (arePhoneMsrsDated) viewModel.sendRunMeasurementNotification(Measure.phone)
-            else viewModel.cancelRunMeasurementNotification(Measure.phone)
-        }
+
         val areNoiseMsrsDated by viewModel.areNoiseMsrsDated.collectAsStateWithLifecycle()
-        LaunchedEffect(areNoiseMsrsDated, recordPermission){
-            if (areNoiseMsrsDated && recordPermission.status.isGranted)
-                viewModel.sendRunMeasurementNotification(Measure.sound)
-            else
-                viewModel.cancelRunMeasurementNotification(Measure.sound)
-        }
+
         val areWifiMsrsDated by viewModel.areWifiMsrsDated.collectAsStateWithLifecycle()
-        LaunchedEffect(areWifiMsrsDated){
-            if (areWifiMsrsDated) viewModel.sendRunMeasurementNotification(Measure.wifi)
-            else viewModel.cancelRunMeasurementNotification(Measure.wifi)
-        }
+
 
         val searchBarQuery by viewModel.mapScreenUiState.searchBarQuery.collectAsStateWithLifecycle(context = Dispatchers.Default)
         val isSearchBarLoading by viewModel.mapScreenUiState.isSearchBarLoading.collectAsStateWithLifecycle(context = Dispatchers.Default)
@@ -275,7 +254,7 @@ fun MapScreen(
 
             content = { paddingValues ->
                 Map(
-                    modifier = Modifier.padding(bottom = paddingValues.calculateBottomPadding() -  paddingValues.calculateBottomPadding()),
+                    modifier = Modifier.padding(bottom = paddingValues.calculateBottomPadding()),
                     soundAvgs = soundAvgs,
                     phoneAvgs = phoneAvgs,
                     wifiAvgs = wifiAvgs,

@@ -30,7 +30,11 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.scopes.ViewModelScoped
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import org.osmdroid.bonuspack.location.GeocoderNominatim
+import java.lang.annotation.Inherited
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -72,7 +76,8 @@ class ApplicationModules {
     fun provideUserSettingsDataStore(@ApplicationContext app : Context) : DataStore<AppSettings> {
         return DataStoreFactory.create(
             serializer = AppSettingsSerializer(),
-            produceFile = { app.filesDir.resolve("$dataStoresDir/$appSettingsDataStoreFileName") }
+            produceFile = { app.filesDir.resolve("$dataStoresDir/$appSettingsDataStoreFileName") },
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         )
     }
 
