@@ -64,6 +64,7 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
         Measure.wifi -> getWifiMsrs(settings).map { it.map { it.firebaseTable.baseInfo  }.baseAvgsMap() }
     }
 
+
     private fun <D,T : Class<D>> getBaseMsrs(msrType : Measure, entity : T, msrsFilter : List<D>.() -> List<D>) : Flow<List<D>>{
         return db.reference.child("$REALTIME_DB_ROOT_PATH/${msrType.name}").snapshots.flowOn(Dispatchers.IO)
             .map { msrTypeTable ->

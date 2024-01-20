@@ -20,12 +20,12 @@ import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
 import com.example.signaldoctor.contracts.MsrsMap
 import com.example.signaldoctor.hiltModules.AndroidGeocoder
-import com.example.signaldoctor.mapUtils.CoordConversions.tileIndexFromLocation
 import com.example.signaldoctor.mapUtils.IFlowGeocoder
 import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.screens.msrTypeWhen
 import com.example.signaldoctor.searchBarHint.ISearchBarHint
+import com.example.signaldoctor.searchBarHint.ProtoBuffHint
 import com.example.signaldoctor.uistates.MapScreenUiState
 import com.example.signaldoctor.utils.AppNotificationManager
 import com.example.signaldoctor.utils.Loggers.consoledebug
@@ -42,6 +42,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.combineTransform
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -59,7 +61,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.withIndex
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
-import org.osmdroid.views.MapView
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
@@ -98,6 +99,26 @@ open class MyViewModel @Inject constructor(
         if(it.index>0)
             notificationManager.launchToast(message = "switched to ${it.value.name} mode")
     }.flowOn(Dispatchers.Main).map{it.value}.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), NetworkMode.OFFLINE)
+
+
+    private val centerWhenNavigatingOnMapScreen = savedStateHandle.getStateFlow(DestinationsInfo.MapScreen.CENTER_LOCATION_ARGUMENT_NAME, true).onStart {
+      consoledebug("Saved state handle flow has started")
+    }.onEach {
+
+        consoledebug("Saved state handle is $it")
+        if(it) {
+            mapScreenUiState.setScreenLocation(
+                settingsDataStore.data.first().lastLocationLat,
+                settingsDataStore.data.first().lastLocationLon
+            )
+            savedStateHandle[DestinationsInfo.MapScreen.CENTER_LOCATION_ARGUMENT_NAME] = false
+        }
+    }.onCompletion {
+        consoledebug("saved state handle flow completed")
+    }.catch {e ->
+        e.printStackTrace()
+        consoledebug("Saved state handle flow error")
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     //val phoneSettings = settingsDataStore.data.flowOn(Dispatchers.IO).map { it.phoneSettings }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), MeasurementSettings.getDefaultInstance())
 
@@ -191,6 +212,7 @@ open class MyViewModel @Inject constructor(
     private val _measurementProgress : MutableStateFlow<Float> = MutableStateFlow(0f)
     val measurementProgress = _measurementProgress.asStateFlow()
 
+
     private val locationUpdateSettings = LocationRequest.Builder(LOCATION_INTERVAL).setPriority(LOCATION_PRIORITY)
         .build()
 
@@ -228,7 +250,7 @@ open class MyViewModel @Inject constructor(
     val areNoiseMsrsDated = areMsrsDated(Measure.sound)
     val areWifiMsrsDated = areMsrsDated(Measure.wifi)
 
-    fun areMsrsDated(msrType: Measure) = combineTransform(
+    private fun areMsrsDated(msrType: Measure) = combineTransform(
         settingsDataStore.data.map { it.networkMode }.flowOn(Dispatchers.IO).distinctUntilChanged(),
         userLocation.filterNotNull()
     ){ networkMode, userLocation ->
@@ -287,7 +309,7 @@ open class MyViewModel @Inject constructor(
 */
 
      fun checkLocationSettings(mainActivity: MainActivity) = viewModelScope.launch {
-            userLocation.value?.let { MapView.getTileSystem().tileIndexFromLocation(it )}
+           // userLocation.value?.let { MapView.getTileSystem().tileIndexFromLocation(it )}
             locationProvider.checkLocationSettings(locationUpdateSettings, mainActivity)
     }
 
@@ -298,20 +320,23 @@ open class MyViewModel @Inject constructor(
             if(job.isActive) return
         }
 
-        locationUpdatesJob = viewModelScope.launch{
-
-            locationProvider.requestLocationUpdates(locationUpdateSettings).onCompletion {
+        locationUpdatesJob = locationProvider.requestLocationUpdates(locationUpdateSettings).onCompletion {
+                consoledebug("locations updates are cancelled")
                 _userLocation.value = null
                 it?.printStackTrace()
-            }.distinctUntilChanged().collect{ newLocation->
+            }.distinctUntilChanged().onEach{ newLocation->
 
                 _userLocation.value = newLocation
 
                 if(newLocation!=null)
                     setLastLocationUserSettings(newLocation)
-            }
+                else {
+                    //this ensures that measurements stop when user location is not available
+                    mapScreenUiState.changeMeasuringState(MeasuringState.STOP)
+                    msrsWorkManager.cancelAllOneTimeMeasurements()
+                }
+            }.launchIn(viewModelScope)
 
-        }
     }
     fun locationUpdatesOff(){
         locationUpdatesJob?.run {
@@ -339,8 +364,15 @@ open class MyViewModel @Inject constructor(
 
                     mapScreenUiState.updateSearchBarQuery(getAddressLine(0))
 
+                    addLocalHint(ProtoBuffHint(
+                        displayName = getAddressLine(0),
+                        latitude = latitude,
+                        longitude = longitude
+                    ))
+
                 } ?: mapScreenUiState.updateSearchBarQuery("${location.latitude},${location.longitude}")
             }
+            mapScreenUiState.setShowHints(false)
         }
     }
 
@@ -415,7 +447,7 @@ open class MyViewModel @Inject constructor(
     }
 
     fun cancelMeasurement(msrType : Measure){
-        msrsWorkManager.cancelMeasurement(msrType)
+        msrsWorkManager.cancelOneTimeMeasurement(msrType)
     }
 
     fun cancelBackgroundMeasurement(msrType: Measure){
@@ -423,17 +455,30 @@ open class MyViewModel @Inject constructor(
     }
 
     fun cancelAllMeasurements(){
-        msrsWorkManager.cancelAllMeasurements()
+        msrsWorkManager.cancelAllOneTimeMeasurements()
     }
 
     fun changeMeasuringState(newMsrState: MeasuringState) = run {
         mapScreenUiState.changeMeasuringState(newMsrState)
     }
 
+    fun sendDatedMeasurementNotification(msrType: Measure) : Boolean {
+        return if(permissionsChecker.isPostingNotificationGranted()) {
+            notificationManager.sendRunMeasurementNotification(msrType)
+            true
+        }
+        else false
+    }
+
+    fun cancelDatedMeasurementNotification(msrType: Measure){
+        notificationManager.cancelRunMeasurementNotification(msrType)
+    }
+
 
     init{
-
+        /*
         if(savedStateHandle.get<Boolean>(DestinationsInfo.MapScreen.CENTER_LOCATION_ARGUMENT_NAME) == true) {
+
 
             viewModelScope.launch {
                 settingsDataStore.data.first().let { settingsSnap ->
@@ -443,7 +488,9 @@ open class MyViewModel @Inject constructor(
                     )
                 }
             }
-        }
+        }*/
+
+        //centerWhenNavigatingOnMapScreen.launchIn(viewModelScope)
 
         consoledebug("My ViewModel is Initialized")
 
@@ -462,33 +509,9 @@ open class MyViewModel @Inject constructor(
         }
          */
 
-        //registerRunMeasurementReceiver()
-
-        //If location permissions are granted, start location update on app boot
-       /* if(app.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-            ||
-            app.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED){
-
-            locationUpdatesOn()
-            setUserLocationAsScreenLocation()
-        }*/
-
-
 
     }
 
-    fun sendDatedMeasurementNotification(msrType: Measure){
-        consoledebug("inside sendRunMeasurementNotification()")
-        notificationManager.sendRunMeasurementNotification(msrType)
-    }
-
-    fun cancelDatedMeasurementNotification(msrType: Measure){
-        notificationManager.cancelRunMeasurementNotification(msrType)
-    }
-
-    fun registerRunMeasurementReceiver(){
-        receiversManager.registerRunMeasurementReceiver(exported = false)
-    }
 
 
     override fun onCleared() {

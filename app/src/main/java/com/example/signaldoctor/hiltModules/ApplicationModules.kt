@@ -4,6 +4,7 @@ import android.content.Context
 import android.location.Geocoder
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.room.Room
 import androidx.work.WorkManager
 import com.example.signaldoctor.AppSettings
@@ -77,7 +78,11 @@ class ApplicationModules {
         return DataStoreFactory.create(
             serializer = AppSettingsSerializer(),
             produceFile = { app.filesDir.resolve("$dataStoresDir/$appSettingsDataStoreFileName") },
-            scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+            corruptionHandler = ReplaceFileCorruptionHandler { e ->
+                e.printStackTrace()
+                AppSettings.getDefaultInstance()
+            }
         )
     }
 
@@ -86,7 +91,12 @@ class ApplicationModules {
     fun provideLocalHints(@ApplicationContext app : Context) : DataStore<LocalHints>{
         return DataStoreFactory.create(
             serializer = LocalHintsSerializer(),
-            produceFile = { app.filesDir.resolve("$dataStoresDir/$localHintsFileName") }
+            produceFile = { app.filesDir.resolve("$dataStoresDir/$localHintsFileName") },
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+            corruptionHandler = ReplaceFileCorruptionHandler { e ->
+                e.printStackTrace()
+                LocalHints.getDefaultInstance()
+            }
         )
     }
 

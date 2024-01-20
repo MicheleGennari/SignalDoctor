@@ -3,14 +3,23 @@ package com.example.signaldoctor.appComponents
 import android.annotation.SuppressLint
 import android.content.IntentSender
 import android.location.Location
+import android.os.HandlerThread
 import android.os.Looper
+import androidx.constraintlayout.solver.widgets.Flow
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.*
 import com.google.android.gms.tasks.CancellationTokenSource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.android.asCoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.concurrent.Executors
+import java.util.logging.Handler
 import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -24,32 +33,37 @@ class FlowLocationProvider @Inject constructor(
     private val settingsClient : SettingsClient,
 ){
 
+    companion object {
+
+    }
+
     @SuppressLint("MissingPermission")
     fun requestLocationUpdates(lr : LocationRequest) = callbackFlow<Location?> {
 
-        val callback = object : LocationCallback(){
-            override fun onLocationResult(p0: LocationResult) {
-                super.onLocationResult(p0)
-                trySend(p0.lastLocation)
+
+            val callback = object : LocationCallback() {
+                override fun onLocationResult(p0: LocationResult) {
+                    super.onLocationResult(p0)
+                    trySend(p0.lastLocation)
+                }
+
+                override fun onLocationAvailability(p0: LocationAvailability) {
+                    super.onLocationAvailability(p0)
+                    if (!p0.isLocationAvailable) trySend(null)
+                }
+
             }
 
-            override fun onLocationAvailability(p0: LocationAvailability) {
-                super.onLocationAvailability(p0)
-                if(!p0.isLocationAvailable) trySend(null)
+            try {
+                provider.requestLocationUpdates(
+                    lr,
+                    callback,
+                    Looper.getMainLooper()
+                )
+                awaitCancellation()
+            } finally {
+                provider.removeLocationUpdates(callback)
             }
-
-        }
-
-        try{
-            provider.requestLocationUpdates(
-                lr,
-                callback,
-                Looper.myLooper()
-            )
-            awaitCancellation()
-        }finally {
-            provider.removeLocationUpdates(callback)
-        }
 
     }
 

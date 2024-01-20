@@ -153,19 +153,19 @@ class BackgroundMeasurementsService: Service() {
     }.onEach { appSettings ->
         consoledebug("Inside coroutine onEach")
 
-        msrsWorkManager.runBackgroundMeasurement(Measure.phone, Duration.ofMinutes(appSettings.phoneSettings.periodicity.toLong()))
+        //msrsWorkManager.runBackgroundMeasurement(Measure.phone, Duration.ofMinutes(appSettings.phoneSettings.periodicity.toLong()))
 
-        /*
+
         manageBackgroundMeasurement(Measure.phone,appSettings.phoneSettings)
         manageBackgroundMeasurement(Measure.sound,appSettings.noiseSettings)
         manageBackgroundMeasurement(Measure.wifi, appSettings.wifiSettings)
-        */
+
 
         shutdownServiceIfIdle(appSettings)
 
     }.onCompletion { _ ->
         consoledebug("coroutine onCompletion")
-        msrsWorkManager.cancelAllMeasurements()
+        msrsWorkManager.cancelAllBackgroundMeasurements()
     }
 
 
@@ -286,7 +286,7 @@ class BackgroundMeasurementsService: Service() {
             consoledebug("launching coroutine (this debug is  outside launch())")
             coroutineScope.launch {
                 consoledebug("Launching coroutine...")
-                backgroundMeasurementsManager().stateIn(coroutineScope).collect()
+                backgroundMeasurementsManager().stateIn(coroutineScope)
             }
 
     }

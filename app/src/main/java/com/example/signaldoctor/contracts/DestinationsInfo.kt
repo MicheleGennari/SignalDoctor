@@ -1,7 +1,6 @@
 package com.example.signaldoctor.contracts
 
 import android.content.Intent
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
@@ -20,9 +19,9 @@ object DestinationsInfo {
 
          const val CENTER_LOCATION_ARGUMENT_NAME = "centerMapOnSavedLocation"
 
-         const val routeQuery = "?$CENTER_LOCATION_ARGUMENT_NAME={$CENTER_LOCATION_ARGUMENT_NAME}"
+         const val routeWithQuery = "?$CENTER_LOCATION_ARGUMENT_NAME={$CENTER_LOCATION_ARGUMENT_NAME}"
 
-        const val route = routePath + routeQuery
+        const val route = routePath + routeWithQuery
 
 
          val navArguments = listOf(

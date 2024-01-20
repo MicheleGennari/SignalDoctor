@@ -20,6 +20,8 @@ localHints.toBuilder().addLocalHints(
     updateData { localHints ->
 
         localHints.toBuilder().apply {
+
+            //add only if location is not already saved as a search bar hint
             if (!localHints.localHintsList.any { it.displayName == hint.locationName }) {
                 addLocalHints(
                     LocalHint.getDefaultInstance().toBuilder().apply {

@@ -11,6 +11,7 @@ import com.example.signaldoctor.mapUtils.IFlowGeocoder
 import com.example.signaldoctor.mapUtils.geocoderHints
 import com.example.signaldoctor.searchBarHint.ISearchBarHint
 import com.example.signaldoctor.utils.Loggers
+import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.example.signaldoctor.utils.addHint
 import com.example.signaldoctor.utils.protoBufHints
 import com.example.signaldoctor.workers.printAndReturn
@@ -35,6 +36,9 @@ class MapScreenUiState @Inject constructor(
     private val _screenLocation = MutableStateFlow<Location?>(null)
     val screenLocation = _screenLocation.asStateFlow()
     fun setScreenLocation(@FloatRange(from = -90.0, to= 90.0 ) latitude : Double, @FloatRange(from = -180.0, to= 180.0 ) longitude : Double ) {
+
+        consoledebug("inside set Screen Location")
+
         _screenLocation.value = Location("provider").also { newScreenLocation ->
             newScreenLocation.latitude = latitude
             newScreenLocation.longitude = longitude
@@ -117,6 +121,7 @@ class MapScreenUiState @Inject constructor(
     val measuringState = _measuringState.asStateFlow()
     fun changeMeasuringState(newMeasuringState: MeasuringState){
         _measuringState.value = newMeasuringState
+
     }
 
 }

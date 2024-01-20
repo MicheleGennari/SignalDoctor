@@ -58,7 +58,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.R
-import com.example.signaldoctor.appComponents.viewModels.MyViewModel
+import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.appComponents.viewModels.SettingsScreenVM
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.services.BackgroundMeasurementsService
@@ -92,10 +92,17 @@ fun SettingsScreen(
     onNavigationBack : () -> Unit = {}
 ){
 
+    val mainActivity = LocalContext.current as MainActivity
 
-    val recordPermission = rememberPermissionState(permission = android.Manifest.permission.RECORD_AUDIO)
+    val runBaseMeasurementPermission = rememberBaseMeasurementsPermissionState()
 
-    val locationPermission = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION)
+    val runNoiseMeasurementPermission = rememberNoiseMeasurementPermissionState()
+
+    val sendNotificationsPermission = rememberSendNotificationsPermissionState()
+
+    val recordPermission = rememberRecordPermissionState()
+
+    val locationPermission = rememberLocationPermissionState()
 
     val phoneSettings by settingsScreenVM.phoneSettings.collectAsStateWithLifecycle()
 
@@ -150,7 +157,7 @@ fun SettingsScreen(
                 isBackgroundSwitchEnabled =
                 (currentSettingsList != Measure.sound || recordPermission.status.isGranted)
                         && locationPermission.status.isGranted,
-                onIsBackgroundChange = {
+                onIsBackgroundOnChange = {
 
                     if(locationPermission.status.isGranted){
                         if(currentSettingsList != Measure.sound || recordPermission.status.isGranted)
@@ -169,6 +176,14 @@ fun SettingsScreen(
                     else if(!locationPermission.status.isGranted) locationPermission.
                             launchPermissionRequest()
                     */
+                },
+                onIsBackgroundOnChangeWhenDisabled = { _ ->
+                    val neededPermissions = runNoiseMeasurementPermission
+                        .takeIf { currentSettingsList == Measure.sound } ?: runBaseMeasurementPermission
+
+                    neededPermissions.checkPermissions{
+                        settingsScreenVM.checkLocationSettings(mainActivity)
+                    }
                 },
                 onPeriodicityChange = {
                     settingsScreenVM.updateMeasureSettings(currentSettingsList){
@@ -308,7 +323,8 @@ fun MeasurementSettingsList(
     titleFontSize : TextUnit = 6.em,
     optionDescriptionFontSize : TextUnit = 4.em,
     divider : @Composable ColumnScope.() -> Unit = {},
-    onIsBackgroundChange : (Boolean) -> Unit,
+    onIsBackgroundOnChange : (Boolean) -> Unit,
+    onIsBackgroundOnChangeWhenDisabled : (Boolean) -> Unit = {},
     isBackgroundSwitchEnabled : Boolean = true,
     onPeriodicityChange : (Int) -> Unit,
     onUseMsrsToTakeChange : (Boolean) -> Unit,
@@ -334,7 +350,7 @@ fun MeasurementSettingsList(
             checkMode = OptionalSliderDefaults.CheckMethod.SWITCH,
             value = measurementSettings.periodicity,
             checked = isBackgroundSwitchEnabled && measurementSettings.isBackgroundMsrOn,
-            onChecked = onIsBackgroundChange,
+            onChecked = onIsBackgroundOnChange,
             description = "Background measurement",
             valueText ="every "+ when (measurementSettings.periodicity) {
                 1 -> " 1 minute"
@@ -427,6 +443,7 @@ fun OptionalSliderSetting(
     checked : Boolean = true,
     enabled : Boolean = true,
     onChecked : (Boolean) -> Unit = {},
+    onCheckedWhenDisabled : (Boolean) -> Unit = {},
     description: String = "This is a slider option setting",
     valueText : String = "current selected value",
     value : Number = 0f,
@@ -446,12 +463,12 @@ fun OptionalSliderSetting(
             OptionalSliderDefaults.CheckMethod.CHECKBOX -> Checkbox(
                 checked = checked,
                 enabled = enabled,
-                onCheckedChange = onChecked
+                onCheckedChange = if(enabled) onChecked else onCheckedWhenDisabled
             )
             OptionalSliderDefaults.CheckMethod.SWITCH -> Switch(
                 checked = checked,
                 enabled = enabled,
-                onCheckedChange = onChecked
+                onCheckedChange = if (enabled) onChecked else onCheckedWhenDisabled
             )
         }
         AnimatedVisibility(visible = checked) {

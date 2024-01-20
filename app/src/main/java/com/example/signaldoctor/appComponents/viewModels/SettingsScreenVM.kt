@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.appComponents.FlowLocationProvider
+import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.screens.msrTypeWHen
 import com.example.signaldoctor.services.BackgroundMeasurementsManager
@@ -15,6 +16,7 @@ import com.example.signaldoctor.utils.noiseSettings
 import com.example.signaldoctor.utils.phoneSettings
 import com.example.signaldoctor.utils.updateAppSettings
 import com.example.signaldoctor.utils.wifiSettings
+import com.google.android.gms.location.LocationRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
@@ -28,12 +30,16 @@ import kotlinx.coroutines.launch
 import java.io.IOException
 import javax.inject.Inject
 
+
 @HiltViewModel
 class SettingsScreenVM @Inject constructor(
     private val userSettings: DataStore<AppSettings>,
-    private val backgroundMeasurementsManager : BackgroundMeasurementsManager
+    private val backgroundMeasurementsManager : BackgroundMeasurementsManager,
+    private val locationProvider: FlowLocationProvider
 ) : ViewModel() {
 
+    private val locationUpdateSettings = LocationRequest.Builder(LOCATION_INTERVAL).setPriority(LOCATION_PRIORITY)
+        .build()
 
     private fun <T> DataStore<AppSettings>.settingStateFlow(sharingMode : SharingStarted = SharingStarted.Eagerly, initialValue : T, getter : AppSettings.() -> T) =
         data.map { it.getter() }.flowOn(Dispatchers.IO).stateIn(viewModelScope, sharingMode, initialValue = initialValue)
@@ -97,6 +103,13 @@ class SettingsScreenVM @Inject constructor(
                 true
             } else false
         }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+
+    fun checkLocationSettings(mainActivity: MainActivity){
+        viewModelScope.launch{
+            locationProvider.checkLocationSettings(locationUpdateSettings, mainActivity)
+        }
+    }
 
     override fun onCleared() {
         consoledebug("the Settings Screen ViewModel is now cleared")

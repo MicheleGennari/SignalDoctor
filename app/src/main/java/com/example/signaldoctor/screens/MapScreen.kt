@@ -1,9 +1,13 @@
 package com.example.signaldoctor.screens
 
+import android.app.Activity
 import android.content.Context
 import android.content.res.Resources.NotFoundException
 import android.location.Location
+import android.os.Build
+import android.util.TypedValue
 import android.widget.Toast
+import androidx.activity.ComponentActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -56,14 +60,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.mapSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -72,12 +83,14 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
+import androidx.fragment.app.Fragment
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
 import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.R
-import com.example.signaldoctor.appComponents.CHANGE_LOCATION_SETTINGS
 import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.appComponents.viewModels.MyViewModel
 import com.example.signaldoctor.appComponents.viewModels.SettingsScreenVM
@@ -94,85 +107,101 @@ import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.accompanist.permissions.rememberPermissionState
-import com.google.android.gms.common.api.ResolvableApiException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.osmdroid.api.IGeoPoint
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.CustomZoomButtonsController
+import org.osmdroid.views.CustomZoomButtonsDisplay
 import org.osmdroid.views.MapView
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun MapScreen(
     modifier: Modifier = Modifier,
-    viewModel: MyViewModel = hiltViewModel(),
-    settingsScreenVM: SettingsScreenVM = hiltViewModel(),
+    mapScreenVM: MyViewModel = hiltViewModel(),
     navigateToSettings : () -> Unit = {}
     ){
     SignalDoctorTheme {
 
+        
+        val isInternetAvailable by mapScreenVM.isNetworkAvailable.collectAsStateWithLifecycle()
 
-        val isInternetAvailable by viewModel.isNetworkAvailable.collectAsStateWithLifecycle()
-        val locationPermission = rememberPermissionState(permission = android.Manifest.permission.ACCESS_FINE_LOCATION){ isGranted ->
+        val runNoiseMeasurementsPermission = rememberNoiseMeasurementPermissionState()
+
+        val runBaseMeasurementPermission = rememberBaseMeasurementsPermissionState()
+
+        val sendNotificationsPermission = rememberSendNotificationsPermissionState { isGranted ->
+            when(isGranted) {
+                true -> consoledebug(" Notifications Permission GRANTED")
+                false -> consoledebug(" Notifications Permission DENIED")
+            }
+        }
+
+        val locationPermission = rememberLocationPermissionState { isGranted ->
             when(isGranted) {
                 true -> {
-                    consoledebug("Permission GRANTED")
-                    viewModel.locationUpdatesOn()
+                    consoledebug("Location Permission GRANTED")
+                    mapScreenVM.locationUpdatesOn()
                 }
-                false -> consoledebug("Permission DENIED")
+                false -> consoledebug("Location Permission DENIED")
+            }
+        }
+
+        val recordPermission = rememberRecordPermissionState { isGranted ->
+            when(isGranted) {
+                true -> consoledebug(" Recording Permission GRANTED")
+                false -> consoledebug(" Recording Permission DENIED")
             }
         }
 
         DisposableEffect(locationPermission.status.isGranted){
             if(locationPermission.status.isGranted)
-                viewModel.locationUpdatesOn()
+                mapScreenVM.locationUpdatesOn()
             onDispose {
-                if(!viewModel.areLocationUpdatesOn()){
-                    viewModel.locationUpdatesOff()
+                if(!mapScreenVM.areLocationUpdatesOn()){
+                    mapScreenVM.locationUpdatesOff()
                 }
             }
         }
 
-        val currentNetworkMode by viewModel.networkMode.collectAsStateWithLifecycle()
-        val currentMsrType by viewModel.mapScreenUiState.currentMsrType.collectAsStateWithLifecycle()
-
-        val recordPermission = rememberPermissionState(permission = android.Manifest.permission.RECORD_AUDIO){
-                isGranted -> when(isGranted) {
-            true -> consoledebug("Permission GRANTED")
-            false -> consoledebug("Permission DENIED")
-            }
-        }
-        val screenLocation by viewModel.mapScreenUiState.screenLocation.collectAsStateWithLifecycle()
-        val userLocation by viewModel.userLocation.collectAsStateWithLifecycle()
+        val currentNetworkMode by mapScreenVM.networkMode.collectAsStateWithLifecycle()
+        val currentMsrType by mapScreenVM.mapScreenUiState.currentMsrType.collectAsStateWithLifecycle()
 
 
-        val arePhoneMsrsDated by viewModel.arePhoneMsrsDated.collectAsStateWithLifecycle()
-
-        val areNoiseMsrsDated by viewModel.areNoiseMsrsDated.collectAsStateWithLifecycle()
-
-        val areWifiMsrsDated by viewModel.areWifiMsrsDated.collectAsStateWithLifecycle()
+        val screenLocation by mapScreenVM.mapScreenUiState.screenLocation.collectAsStateWithLifecycle()
+        val userLocation by mapScreenVM.userLocation.collectAsStateWithLifecycle()
 
 
-        val searchBarQuery by viewModel.mapScreenUiState.searchBarQuery.collectAsStateWithLifecycle(context = Dispatchers.Default)
-        val isSearchBarLoading by viewModel.mapScreenUiState.isSearchBarLoading.collectAsStateWithLifecycle(context = Dispatchers.Default)
+        val arePhoneMsrsDated by mapScreenVM.arePhoneMsrsDated.collectAsStateWithLifecycle()
 
-        val localSearchHints by viewModel.localSearchBarHints.collectAsStateWithLifecycle()
-        val searchHints by viewModel.searchBarHints.collectAsStateWithLifecycle()
-        val showHints by viewModel.mapScreenUiState.searchbarShowHints.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
-        val centerOnScreenLocation by viewModel.mapScreenUiState.centerOnScreenLocation.collectAsStateWithLifecycle()
+        val areNoiseMsrsDated by mapScreenVM.areNoiseMsrsDated.collectAsStateWithLifecycle()
 
-        val measurementProgress by  animateFloatAsState(targetValue = viewModel.measurementProgress.collectAsStateWithLifecycle().value,
+        val areWifiMsrsDated by mapScreenVM.areWifiMsrsDated.collectAsStateWithLifecycle()
+
+
+        val searchBarQuery by mapScreenVM.mapScreenUiState.searchBarQuery.collectAsStateWithLifecycle(context = Dispatchers.Default)
+        val isSearchBarLoading by mapScreenVM.mapScreenUiState.isSearchBarLoading.collectAsStateWithLifecycle(context = Dispatchers.Default)
+
+        val localSearchHints by mapScreenVM.localSearchBarHints.collectAsStateWithLifecycle()
+        val searchHints by mapScreenVM.searchBarHints.collectAsStateWithLifecycle()
+        val showHints by mapScreenVM.mapScreenUiState.searchbarShowHints.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val centerOnScreenLocation by mapScreenVM.mapScreenUiState.centerOnScreenLocation.collectAsStateWithLifecycle()
+
+        val measurementProgress by  animateFloatAsState(targetValue = mapScreenVM.measurementProgress.collectAsStateWithLifecycle().value,
             label = "Measurement Progress Bar"
         )
-        val lastNoiseMsr by viewModel.lastNoiseMsr.collectAsStateWithLifecycle()
-        val lastPhoneMsr by viewModel.lastPhoneMsr.collectAsStateWithLifecycle()
-        val lastWifiMsr by viewModel.lastWifiMsr.collectAsStateWithLifecycle()
+        val lastNoiseMsr by mapScreenVM.lastNoiseMsr.collectAsStateWithLifecycle()
+        val lastPhoneMsr by mapScreenVM.lastPhoneMsr.collectAsStateWithLifecycle()
+        val lastWifiMsr by mapScreenVM.lastWifiMsr.collectAsStateWithLifecycle()
 
-        val soundAvgs by viewModel.soundAvgs.collectAsStateWithLifecycle()
-        val phoneAvgs by viewModel.phoneAvgs.collectAsStateWithLifecycle()
-        val wifiAvgs by viewModel.wifiAvgs.collectAsStateWithLifecycle()
+        val soundAvgs by mapScreenVM.soundAvgs.collectAsStateWithLifecycle()
+        val phoneAvgs by mapScreenVM.phoneAvgs.collectAsStateWithLifecycle()
+        val wifiAvgs by mapScreenVM.wifiAvgs.collectAsStateWithLifecycle()
 
-        val currentMeasuringState by viewModel.mapScreenUiState.measuringState.collectAsStateWithLifecycle()
+        val currentMeasuringState by mapScreenVM.mapScreenUiState.measuringState.collectAsStateWithLifecycle()
 
         val snackbarHostState = remember{SnackbarHostState()}
         val snackbarLauncher = rememberCoroutineScope()
@@ -192,31 +221,33 @@ fun MapScreen(
                         text = searchBarQuery,
                         showHints = showHints,
                         onActiveChange = {
-                                         viewModel.mapScreenUiState.setShowHints(it)
+                                         mapScreenVM.mapScreenUiState.setShowHints(it)
                         },
                         onClickHint = { hint ->
-                            viewModel.mapScreenUiState.setScreenLocation(hint.latitude, hint.longitude)
-                            viewModel.mapScreenUiState.setShowHints(false)
+                            mapScreenVM.mapScreenUiState.setScreenLocation(hint.latitude, hint.longitude)
+                            mapScreenVM.mapScreenUiState.updateSearchBarQuery(hint.locationName)
+                            mapScreenVM.mapScreenUiState.setShowHints(false)
                         },
                         localHints = localSearchHints,
                         onClickLocalHint = { hint ->
-                            viewModel.addLocalHint(hint)
-                            viewModel.mapScreenUiState.setScreenLocation(hint.latitude, hint.longitude)
-                            viewModel.mapScreenUiState.setShowHints(false)
+                            mapScreenVM.addLocalHint(hint)
+                            mapScreenVM.mapScreenUiState.setScreenLocation(hint.latitude, hint.longitude)
+                            mapScreenVM.mapScreenUiState.updateSearchBarQuery(hint.locationName)
+                            mapScreenVM.mapScreenUiState.setShowHints(false)
                         },
                         hints = searchHints,
                         onQueryChange = { updatedQuery ->
-                            viewModel.mapScreenUiState.updateSearchBarQuery(updatedQuery)
+                            mapScreenVM.mapScreenUiState.updateSearchBarQuery(updatedQuery)
                         },
-                        onQueryCancel = {viewModel.mapScreenUiState.updateSearchBarQuery("")},
+                        onQueryCancel = {mapScreenVM.mapScreenUiState.updateSearchBarQuery("")},
                         onSearch = { query ->
                             QueryAddressTranslator.getCoordFromQuery(query)?.run {
-                                    viewModel.mapScreenUiState.setScreenLocation(
+                                    mapScreenVM.mapScreenUiState.setScreenLocation(
                                         latitude,
                                         longitude
                                     )
                                 } ?: searchHints.firstOrNull()?.run{
-                                    viewModel.mapScreenUiState.setScreenLocation(
+                                    mapScreenVM.mapScreenUiState.setScreenLocation(
                                         latitude,
                                         longitude
                                     )
@@ -225,30 +256,11 @@ fun MapScreen(
                                     message = "Can't find such location"
                                 )
                             }
-                            viewModel.mapScreenUiState.setShowHints(false)
+                            mapScreenVM.mapScreenUiState.setShowHints(false)
                         },
                         isSearching = isSearchBarLoading
                     )
-                    /*
-                    Divider(
-                        modifier = Modifier.alpha(0f),
-                        thickness = 12.dp
-                    )
 
-
-                    NetworkModeToggleButton(
-                        modifier= Modifier,
-                        checked = currentNetworkMode == NetworkMode.ONLINE,
-                        onCheckedChange = {
-                            if( !(
-                                    currentNetworkMode == NetworkMode.OFFLINE
-                                    && !isInternetAvailable
-                            )) {
-                                viewModel.switchNetworkMode()
-                            }
-                        }
-                    )
-                */
                 }
             },
 
@@ -263,8 +275,7 @@ fun MapScreen(
                     userLocation = userLocation,
                     screenLocation= screenLocation,
                     centerOnUserLocation = centerOnScreenLocation,
-                    onEndCenterOnUserLocation = {viewModel.mapScreenUiState.setCenterOnScreenLocation(false)},
-                    updateSearchBarText = {viewModel.mapScreenUiState.updateSearchBarQuery(it) }
+                    onEndCenterOnUserLocation = {mapScreenVM.mapScreenUiState.setCenterOnScreenLocation(false)},
                 )
 
                 Column(
@@ -286,7 +297,7 @@ fun MapScreen(
                                                     && !isInternetAvailable
                                             )
                                 ) {
-                                    viewModel.switchNetworkMode()
+                                    mapScreenVM.switchNetworkMode()
                                 }
                             }
                         )
@@ -301,34 +312,26 @@ fun MapScreen(
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-
                         val mainActivity = LocalContext.current as MainActivity
 
                         UserLocationButton(
                             modifier = Modifier.size(60.dp),
                             enabled = userLocation != null,
                             onClick = {
-
-                                if (!locationPermission.status.isGranted)
-                                    locationPermission.launchPermissionRequest()
-                                else if (userLocation == null) {
-                                    try {
-                                        viewModel.checkLocationSettings(mainActivity)
-                                    } catch (resolvable: ResolvableApiException) {
-
-                                        resolvable.startResolutionForResult(
-                                            mainActivity,
-                                            CHANGE_LOCATION_SETTINGS
-                                        )
-                                    }
-                                } else {
-                                    viewModel.mapScreenUiState.setScreenLocation(
+                                    mapScreenVM.mapScreenUiState.setScreenLocation(
                                         userLocation!!.latitude,
                                         userLocation!!.longitude
                                     )
-                                    viewModel.getLocationNameFromUserLocation()
-                                    viewModel.mapScreenUiState.setShowHints(false)
-                                }
+                                    mapScreenVM.getLocationNameFromUserLocation()
+                            },
+                            onClickWhenDisabled = {
+                                    locationPermission.apply {
+                                        if(!status.isGranted)
+                                            launchPermissionRequest()
+
+                                        else if(userLocation == null)
+                                                mapScreenVM.checkLocationSettings(mainActivity)
+                                    }
                             }
                         )
 
@@ -337,27 +340,40 @@ fun MapScreen(
                             measuringState = currentMeasuringState,
                             measurementProgress = measurementProgress,
                             onClick = {
+
                                 when (currentMeasuringState) {
                                     MeasuringState.STOP -> {
-
-                                        if (currentMsrType == Measure.sound && !recordPermission.status.isGranted)
-                                            recordPermission.launchPermissionRequest()
-                                        else
-                                            viewModel.runMeasurement(currentMsrType)
-
+                                            mapScreenVM.runMeasurement(currentMsrType)
                                     }
 
                                     MeasuringState.RUNNING -> {
-                                        viewModel.cancelMeasurement(currentMsrType)
-                                        //viewModel.changeMeasuringState(MeasuringState.STOP)
+                                        mapScreenVM.cancelMeasurement(currentMsrType)
                                     }
 
                                     MeasuringState.BACKGROUND -> {
-                                        viewModel.cancelBackgroundMeasurement(currentMsrType)
+                                        mapScreenVM.cancelBackgroundMeasurement(currentMsrType)
                                     }
                                 }
                             },
-                            enabled = userLocation != null,
+                            onClickWhenDisabled = {
+
+                                val neededPermissions = runNoiseMeasurementsPermission.takeIf { currentMsrType == Measure.sound } ?: runBaseMeasurementPermission
+
+                                    neededPermissions.checkPermissions{
+                                        if(userLocation == null)
+                                            mapScreenVM.checkLocationSettings(mainActivity)
+                                    }
+
+                              /*
+                                neededPermissions.apply {
+                                    if(!allPermissionsGranted )
+                                        launchMultiplePermissionRequest()
+                                    else if(userLocation == null)
+                                        viewModel.checkLocationSettings(mainActivity)
+                                } */
+                            },
+                            enabled = userLocation != null &&
+                                    if(currentMsrType == Measure.sound) recordPermission.status.isGranted else true,
                         )
 
                         SettingsButton(
@@ -377,89 +393,18 @@ fun MapScreen(
                     modifier = modifier.zIndex(2f),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ){
-                  /*
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth(),
-                        // .padding(horizontal = 30.dp),
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.SpaceAround
-                    ) {
-
-                        val mainActivity = LocalContext.current as MainActivity
-
-                        UserLocationButton(
-                            modifier = Modifier.size(60.dp),
-                            enabled = userLocation != null,
-                            onClick = {
-
-                                if (!locationPermission.status.isGranted)
-                                    locationPermission.launchPermissionRequest()
-                                else if (userLocation == null) {
-                                        try {
-                                            viewModel.checkLocationSettings(mainActivity)
-                                        } catch (resolvable: ResolvableApiException) {
-
-                                            resolvable.startResolutionForResult(
-                                                mainActivity,
-                                                CHANGE_LOCATION_SETTINGS
-                                            )
-                                        }
-                                }else {
-                                    viewModel.mapScreenUiState.setScreenLocation(
-                                        userLocation!!.latitude,
-                                        userLocation!!.longitude
-                                    )
-                                    viewModel.getLocationNameFromUserLocation()
-                                    viewModel.mapScreenUiState.setShowHints(false)
-                                }
-                            }
-                        )
-
-                        MeasuringButton(
-                            modifier = Modifier,
-                            measuringState = currentMeasuringState,
-                            measurementProgress = measurementProgress,
-                            onClick = {
-                                when (currentMeasuringState) {
-                                    MeasuringState.STOP -> {
-
-                                        if (currentMsrType == Measure.sound && !recordPermission.status.isGranted)
-                                            recordPermission.launchPermissionRequest()
-                                        else
-                                            viewModel.runMeasurement(currentMsrType)
-
-                                    }
-
-                                    MeasuringState.RUNNING -> {
-                                        viewModel.cancelMeasurement(currentMsrType)
-                                        //viewModel.changeMeasuringState(MeasuringState.STOP)
-                                    }
-
-                                    MeasuringState.BACKGROUND -> {
-                                        viewModel.cancelBackgroundMeasurement(currentMsrType)
-                                    }
-                                }
-                            },
-                            enabled = userLocation != null,
-                        )
-
-                        SettingsButton(
-                            onClick = navigateToSettings
-                        )
-                    }
-                    */
                     MsrsBar(
                         currentMsrType = currentMsrType,
                         changeCurrentMsrMode = { newMode ->
-                            viewModel.cancelAllMeasurements()
-                            viewModel.mapScreenUiState.setCurrentMsrMode(newMode)
+                            mapScreenVM.cancelAllMeasurements()
+                            mapScreenVM.mapScreenUiState.setCurrentMsrMode(newMode)
                         },
                         phoneMsr = lastPhoneMsr,
                         noiseMsr = lastNoiseMsr,
                         wifiMsr = lastWifiMsr
                     )
                 }
+
             },
             snackbarHost = {
 
@@ -487,9 +432,29 @@ fun Map(
     screenLocation : Location?,
     centerOnUserLocation : Boolean = false,
     onEndCenterOnUserLocation : () -> Unit = {},
-    updateSearchBarText : (String) -> Unit = {},
 ) {
 
+    val density = LocalDensity.current
+
+    var centerLocation by rememberSaveable(stateSaver = Saver(
+        save = {geoPointToSave ->
+            mapOf("latitude" to geoPointToSave.latitude, "longitude" to geoPointToSave.longitude)
+        },
+        restore = { restoredCoord ->
+            GeoPoint(restoredCoord["latitude"] ?: 42.3, restoredCoord["longitude"] ?: 47.9)
+        }
+    )) {
+        mutableStateOf(map.mapCenter)
+    }
+
+    //this saves the current map center when composable is disposed. Don't worry about centering to user location:
+    // this latter behaviour wilil be achieved by AndroidView()'s update function using parameters 'centerOnUserLocation'
+    // and 'userLocation
+    LifecycleStartEffect{
+        onStopOrDispose {
+            centerLocation = map.mapCenter
+        }
+    }
 
     AndroidView(
 
@@ -500,6 +465,19 @@ fun Map(
                 map.setScrollableAreaLimitLongitude(MapView.getTileSystem().minLongitude, MapView.getTileSystem().maxLongitude, 0)
 
                 minZoomLevel = 3.0
+
+                //set MapView's Zoom Buttons such that they are always visible in the bottom left corner, just
+                // on top of the user location button
+                zoomController.setVisibility(CustomZoomButtonsController.Visibility.ALWAYS)
+                zoomController.display.apply {
+                    setPositions(
+                        false,
+                        CustomZoomButtonsDisplay.HorizontalPosition.LEFT,
+                        CustomZoomButtonsDisplay.VerticalPosition.BOTTOM
+                    )
+                    setAdditionalPixelMargins(0f,0f,0f, density.run { 80.dp.toPx() })
+                    setMarginPadding(1/2f, 1/3f)
+                }
                 setMultiTouchControls(true)
                 overlays.run {
                     /////////////////////////////////////
@@ -524,11 +502,17 @@ fun Map(
                         ))
                 }
                 controller.run {
+                    setZoom(12.5)
+                    setCenter(centerLocation)
+                }
+
+                //Older implementation, kept here for roll-back purposes
+                /*controller.run {
                     screenLocation?.let{ screenLocation ->
                         setZoom(12.5)
                         setCenter(GeoPoint(screenLocation.latitude, screenLocation.longitude))
                     }
-                }
+                }*/
             }
         },
 
@@ -567,10 +551,11 @@ fun Map(
 
                 controller.run {
                     if (centerOnUserLocation) {
-                        if (zoomLevelDouble < 15.5)
-                            zoomTo(16.8)
-
+                        consoledebug("map will now be centered")
                         screenLocation?.run{
+                            if (zoomLevelDouble < 15.5)
+                                zoomTo(16.8)
+
                             animateTo(
                                 GeoPoint(latitude, longitude),
                                 16.6,
@@ -582,7 +567,6 @@ fun Map(
                 }
                 invalidate()
             }
-        //consoledebug("CRASH TEST")
     }
 }
 
@@ -686,7 +670,8 @@ fun SearchBar(
                     hintsColor = MaterialTheme.colorScheme.secondary,
                     onClickHint = { hint ->
                             onClickHint(hint)
-                    }
+                    },
+                    onEmpty = null
                 )
 
                 SearchBarHints(
@@ -696,12 +681,14 @@ fun SearchBar(
                         onClickLocalHint(hint)
                     }
                 ){
-                    ListItem(headlineContent = {
-                        Text(
-                            text = "no results found",
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    })
+                    if (localHints.isEmpty()){
+                        ListItem(headlineContent = {
+                            Text(
+                                text = "no results found",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        })
+                    }
                 }
 
             } else {
@@ -782,11 +769,12 @@ fun UserLocationButton(
     modifier: Modifier = Modifier,
     shape : Shape = CircleShape,
     onClick: () -> Unit = {},
+    onClickWhenDisabled: () -> Unit = {},
     enabled : Boolean = false
     ){
     FloatingActionButton(
         modifier = modifier,
-        onClick = onClick,
+        onClick = if(enabled) onClick else onClickWhenDisabled,
         shape = shape,
         containerColor = if(enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.background,
         contentColor = if(enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
@@ -804,6 +792,7 @@ fun UserLocationButton(
 fun MeasuringButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
+    onClickWhenDisabled : () -> Unit = {},
     enabled: Boolean = true,
     fabInteractions : MutableInteractionSource = remember{MutableInteractionSource()} ,
     measuringState: MeasuringState = MeasuringState.STOP,
@@ -830,7 +819,7 @@ fun MeasuringButton(
         text = {},
         expanded = false,
         containerColor = if(enabled) MaterialTheme.colorScheme.onPrimary else  Color.DarkGray,
-        onClick = if(enabled) onClick else fun () {},
+        onClick = if(enabled) onClick else onClickWhenDisabled,
         shape = CircleShape,
         icon = {
 
@@ -1006,11 +995,12 @@ fun StatusSnackBarsLauncher(
 }
 
 @Composable
-fun Toast(
+fun LaunchToast(
     resId : Int? = null,
     message : String,
     duration : Int = Toast.LENGTH_SHORT
 ){
+
     if(resId != null)
         Toast.makeText(LocalContext.current, resId, duration).show()
     else
@@ -1025,4 +1015,6 @@ fun Context.launchToast(resId: Int? = null, message: String, duration: Int = Toa
     }
     else
         Toast.makeText(this, message, duration).show()
+
 }
+

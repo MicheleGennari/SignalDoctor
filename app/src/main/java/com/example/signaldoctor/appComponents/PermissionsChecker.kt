@@ -27,6 +27,8 @@ class PermissionsChecker @Inject constructor(
 
 }
 
+
+
 fun Context.isLocationPermissionGranted() =
     checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
             ||

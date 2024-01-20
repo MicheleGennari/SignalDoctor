@@ -20,9 +20,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 const val MEASURE_WORK_TAG = "MEASURE_WORK"
-const val MEASURE_ONETIME_WORK_TAG = "MEASURE_ONETIME_WORK"
+const val MEASURE_ONE_TIME_WORK_TAG = "MEASURE_ONETIME_WORK"
 const val MEASURE_BACKGROUND_WORK_TAG = "MEASURE_BACKGROUND_WORK"
 const val MIC_CALIBRATION_WORK_TAG ="MIC_CALIBRATION_WORK"
+const val MEASURE_BACKGROUND_NAME_SUFFIX = "_background"
 
 @Singleton
 class MsrsWorkManager @Inject constructor(private val workManager: WorkManager) {
@@ -37,7 +38,7 @@ class MsrsWorkManager @Inject constructor(private val workManager: WorkManager) 
             Measure.phone -> OneTimeWorkRequestBuilder<PhoneMsrWorker>()
         }.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .addTag(MEASURE_WORK_TAG)
-            .addTag(MEASURE_ONETIME_WORK_TAG)
+            .addTag(MEASURE_ONE_TIME_WORK_TAG)
             /*
             .setInputData(workDataOf(
                 MeasurementBase.TILE_INDEX_KEY to MapView.getTileSystem().tileIndexFromLocation(userLocation)
@@ -56,7 +57,7 @@ class MsrsWorkManager @Inject constructor(private val workManager: WorkManager) 
 
     fun runBackgroundMeasurement(msrType: Measure, interval: Duration) : Flow<WorkInfo> {
 
-        val workName = msrType.name+"_background"
+        val periodicWorkName = msrType.name+ MEASURE_BACKGROUND_NAME_SUFFIX
 
         val periodicMsrWorkRequest = msrTypeWhen( msrType,
             phone = PeriodicWorkRequestBuilder<PhoneMsrWorker>(interval),
@@ -71,28 +72,37 @@ class MsrsWorkManager @Inject constructor(private val workManager: WorkManager) 
             .build()
 
         workManager.enqueueUniquePeriodicWork(
-            workName,
+            periodicWorkName,
             ExistingPeriodicWorkPolicy.UPDATE,
             periodicMsrWorkRequest
         )
 
-        return workManager.getWorkInfosForUniqueWorkLiveData(workName).asFlow().map { it.first() }
+        return workManager.getWorkInfosForUniqueWorkLiveData(periodicWorkName).asFlow().map { it.first() }
 
     }
 
 
 
-    fun cancelMeasurement(msrType: Measure){
+    fun cancelOneTimeMeasurement(msrType: Measure){
         workManager.cancelUniqueWork(msrType.name)
     }
 
+    fun cancelAllOneTimeMeasurements(){
+        workManager.cancelAllWorkByTag(MEASURE_ONE_TIME_WORK_TAG)
+    }
+
     fun cancelBackgroundMeasurement(msrType: Measure){
-        workManager.cancelUniqueWork(msrType.name+"_background")
+        workManager.cancelUniqueWork(msrType.name+ MEASURE_BACKGROUND_NAME_SUFFIX)
+    }
+
+    fun cancelAllBackgroundMeasurements(){
+        workManager.cancelAllWorkByTag(MEASURE_BACKGROUND_WORK_TAG)
     }
 
     fun cancelAllMeasurements(){
         workManager.cancelAllWorkByTag(MEASURE_WORK_TAG)
     }
+
 }
 
 
