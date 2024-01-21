@@ -63,8 +63,6 @@ import com.example.signaldoctor.appComponents.viewModels.SettingsScreenVM
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.services.BackgroundMeasurementsService
 import com.example.signaldoctor.services.DURATION_KEY
-import com.example.signaldoctor.services.START_BACKGROUND_ACTION
-import com.example.signaldoctor.services.STOP_BACKGROUND_ACTION
 import com.example.signaldoctor.ui.theme.SignalDoctorTheme
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.example.signaldoctor.utils.MSRS_TO_TAKE_MAX
@@ -110,7 +108,7 @@ fun SettingsScreen(
 
     val wifiSettings by settingsScreenVM.wifiSettings.collectAsStateWithLifecycle()
 
-    var currentSettingsList by remember{ mutableStateOf(Measure.sound) }
+    val currentSettingsList by settingsScreenVM.currentSettingsList.collectAsStateWithLifecycle()
 
     SignalDoctorTheme{
 
@@ -119,8 +117,8 @@ fun SettingsScreen(
             topBar = {
                 SettingsTopBar(
                     currentSettingsList= currentSettingsList,
-                    onTabChange = { measureType : Measure ->
-                        currentSettingsList = measureType
+                    onTabChange = { msrType : Measure ->
+                        settingsScreenVM.changeCurrentSettingsList(msrType)
                     },
                     onNavigationBack = onNavigationBack
                 )
@@ -155,18 +153,16 @@ fun SettingsScreen(
                     }
                 },
                 isBackgroundSwitchEnabled =
-                (currentSettingsList != Measure.sound || recordPermission.status.isGranted)
-                        && locationPermission.status.isGranted,
+                (if(currentSettingsList == Measure.sound)
+                        runNoiseMeasurementPermission.allPermissionsGranted
+                else
+                    runBaseMeasurementPermission.allPermissionsGranted)
+               /*(currentSettingsList != Measure.sound || recordPermission.status.isGranted)
+                        && locationPermission.status.isGranted*/,
                 onIsBackgroundOnChange = {
-
-                    if(locationPermission.status.isGranted){
-                        if(currentSettingsList != Measure.sound || recordPermission.status.isGranted)
                             settingsScreenVM.updateMeasureSettings(currentSettingsList) {
                                 isBackgroundMsrOn = it
                             }
-                        else recordPermission.launchPermissionRequest()
-                    } else locationPermission.launchPermissionRequest()
-
                     /*
                     if((currentSettingsList != Measure.sound || recordPermission.status.isGranted) && locationPermission.status.isGranted){
                         viewModel.updateMeasureSettings(currentSettingsList) {
@@ -350,7 +346,7 @@ fun MeasurementSettingsList(
             checkMode = OptionalSliderDefaults.CheckMethod.SWITCH,
             value = measurementSettings.periodicity,
             checked = isBackgroundSwitchEnabled && measurementSettings.isBackgroundMsrOn,
-            onChecked = onIsBackgroundOnChange,
+            onChecked = if(isBackgroundSwitchEnabled) onIsBackgroundOnChange else onIsBackgroundOnChangeWhenDisabled,
             description = "Background measurement",
             valueText ="every "+ when (measurementSettings.periodicity) {
                 1 -> " 1 minute"
@@ -382,18 +378,6 @@ fun MeasurementSettingsList(
                 onFreshnessChange = onFreshnessChange,
                 onOldnessChange = onOldnessChange
             )
-
-        /*
-        RangeDatePickerSetting2(
-            description = "Select the time range of which measurements will be polled",
-            startDateTitle = "from",
-            startDate = measurementSettings.freshness,
-            onStartDateChange = onFreshnessChange,
-            endDateTitle = "to",
-            endDate = measurementSettings.oldness,
-            onEndDateChange = onOldnessChange
-        )
-        */
 
     }
 
@@ -728,7 +712,7 @@ fun OutlinedDateBox(
 fun startBackgroundMeasurement(msrType : Measure, minutes : Long = 15L) : ComponentName?{
 
     val intent = Intent(LocalContext.current.applicationContext, BackgroundMeasurementsService::class.java).apply {
-        action = START_BACKGROUND_ACTION
+        action = BackgroundMeasurementsService.START_BACKGROUND_ACTION
         putExtra(msrType.name, msrType.ordinal)
         putExtra(DURATION_KEY, minutes)
     }
@@ -744,7 +728,7 @@ fun startBackgroundMeasurement(msrType : Measure, minutes : Long = 15L) : Compon
 fun stopBackgroundMeasurement(msrType: Measure) : Boolean {
 
     val intent = Intent(LocalContext.current.applicationContext, BackgroundMeasurementsService::class.java).apply {
-        action = STOP_BACKGROUND_ACTION
+        action = BackgroundMeasurementsService.STOP_BACKGROUND_ACTION
         putExtra(msrType.name, msrType.ordinal)
     }
 

@@ -17,6 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navigation
+import com.example.signaldoctor.appComponents.viewModels.SettingsScreenVM
 import com.example.signaldoctor.contracts.DestinationsInfo
 import com.example.signaldoctor.screens.MapScreen
 import com.example.signaldoctor.screens.SettingsScreen
@@ -38,10 +39,12 @@ class MainActivity : ComponentActivity() {
                 navController = navController ,
                 startDestination = DestinationsInfo.DestinationGraphMain.route,
             ){
+
                 navigation(
                     startDestination = DestinationsInfo.MapScreen.route,
                     route = DestinationsInfo.DestinationGraphMain.route
                 ){//MapScreen route
+
                     composable(
                         route = DestinationsInfo.MapScreen.route,
                         arguments = DestinationsInfo.MapScreen.navArguments,
@@ -52,14 +55,6 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     ) { backStackEntry ->
-
-
-                        backStackEntry.savedStateRegistry
-
-                        val parent = remember(backStackEntry){
-                            navController.getBackStackEntry(DestinationsInfo.DestinationGraphMain.route)
-                        }
-
 
                         MapScreen(
                             navigateToSettings = {

@@ -10,6 +10,7 @@ import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.screens.msrTypeWHen
 import com.example.signaldoctor.services.BackgroundMeasurementsManager
+import com.example.signaldoctor.services.BackgroundMeasurementsService
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.example.signaldoctor.utils.catchIOException
 import com.example.signaldoctor.utils.noiseSettings
@@ -19,12 +20,16 @@ import com.example.signaldoctor.utils.wifiSettings
 import com.google.android.gms.location.LocationRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -55,6 +60,13 @@ class SettingsScreenVM @Inject constructor(
 
     val wifiSettings = userSettings.settingStateFlow(initialValue = MeasurementSettings.getDefaultInstance()){
         wifiSettings
+    }
+
+    private val _currentSettingsList = MutableStateFlow(Measure.sound)
+    val currentSettingsList = _currentSettingsList.asStateFlow()
+
+    fun changeCurrentSettingsList(msrType: Measure){
+        _currentSettingsList.value = msrType
     }
 
     fun updateSettings(updater : AppSettings.Builder.() -> Unit){
@@ -92,17 +104,20 @@ class SettingsScreenVM @Inject constructor(
     }
 
     //value in this stateFlow tells whether service is active or not
-    fun startBackgroundMeasurementsManager() =
+    private fun startBackgroundMeasurementsManager() =
         combine(
             userSettings.data.catchIOException().map { it.phoneSettings.isBackgroundMsrOn }.distinctUntilChanged(),
             userSettings.data.catchIOException().map { it.noiseSettings.isBackgroundMsrOn }.distinctUntilChanged(),
             userSettings.data.catchIOException().map { it.wifiSettings.isBackgroundMsrOn }.distinctUntilChanged()
         ) { isPhoneBackgroundOn, isNoiseBackgroundOn, isWIfiBackgroundOn ->
-            if (isPhoneBackgroundOn || isNoiseBackgroundOn || isWIfiBackgroundOn) {
-                backgroundMeasurementsManager.start()
-                true
-            } else false
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+            if(isNoiseBackgroundOn) backgroundMeasurementsManager.start(BackgroundMeasurementsService.START_NOISE_ACTION)
+
+            if(isPhoneBackgroundOn) backgroundMeasurementsManager.start(BackgroundMeasurementsService.START_PHONE_ACTION)
+
+            if(isWIfiBackgroundOn) backgroundMeasurementsManager.start(BackgroundMeasurementsService.START_WIFI_ACTION)
+
+        }.shareIn(viewModelScope, SharingStarted.Eagerly)
 
 
     fun checkLocationSettings(mainActivity: MainActivity){

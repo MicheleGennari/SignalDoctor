@@ -4,6 +4,8 @@ import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.NetworkMode
+import com.example.signaldoctor.contracts.Measure
+import com.example.signaldoctor.screens.msrTypeWhen
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import java.io.IOException
@@ -63,4 +65,13 @@ fun Long.toZoneDateTime(): ZonedDateTime = runCatching {
 }.getOrElse { e ->
  e.printStackTrace()
     ZonedDateTime.now()
+}
+
+fun AppSettings.getMeasureSettings(msrType: Measure) = run {
+    msrTypeWhen(
+        msrType,
+        phone = phoneSettings,
+        sound = noiseSettings,
+        wifi = wifiSettings
+    )
 }

@@ -15,17 +15,14 @@ import javax.inject.Singleton
 class BackgroundMeasurementsManager @Inject constructor(
     @ApplicationContext private val app : Context
 ) {
-    fun start() =
+    fun start(action : String) =
         sendStartCommand(
             Intent(app, BackgroundMeasurementsService::class.java)
-                .setAction(START_BACKGROUND_ACTION)
+                .setAction(action)
         )
 
     fun stop(){
-        sendStartCommand(
-            Intent(app, BackgroundMeasurementsService::class.java)
-                .setAction(START_BACKGROUND_ACTION)
-        )
+
     }
 
     fun forceStop(){

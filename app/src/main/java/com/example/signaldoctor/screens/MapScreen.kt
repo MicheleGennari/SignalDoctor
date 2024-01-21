@@ -1,13 +1,9 @@
 package com.example.signaldoctor.screens
 
-import android.app.Activity
 import android.content.Context
 import android.content.res.Resources.NotFoundException
 import android.location.Location
-import android.os.Build
-import android.util.TypedValue
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -34,6 +30,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text2.input.TextFieldState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DockedSearchBar
@@ -60,22 +57,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
 import androidx.compose.runtime.saveable.Saver
-import androidx.compose.runtime.saveable.mapSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.DefaultAlpha
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextPainter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -83,17 +83,14 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
-import androidx.fragment.app.Fragment
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavBackStackEntry
 import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.appComponents.viewModels.MyViewModel
-import com.example.signaldoctor.appComponents.viewModels.SettingsScreenVM
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
 import com.example.signaldoctor.contracts.MsrsMap
@@ -107,15 +104,13 @@ import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.osmdroid.api.IGeoPoint
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.CustomZoomButtonsDisplay
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.ScaleBarOverlay
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -436,7 +431,7 @@ fun Map(
 
     val density = LocalDensity.current
 
-    var centerLocation by rememberSaveable(stateSaver = Saver(
+    var savedCenterLocation by rememberSaveable(stateSaver = Saver(
         save = {geoPointToSave ->
             mapOf("latitude" to geoPointToSave.latitude, "longitude" to geoPointToSave.longitude)
         },
@@ -447,12 +442,18 @@ fun Map(
         mutableStateOf(map.mapCenter)
     }
 
-    //this saves the current map center when composable is disposed. Don't worry about centering to user location:
-    // this latter behaviour wilil be achieved by AndroidView()'s update function using parameters 'centerOnUserLocation'
-    // and 'userLocation
+    var savedZoom by rememberSaveable {
+        mutableDoubleStateOf(map.zoomLevelDouble)
+    }
+
+    //this saves the current map center and zoom level when composable is disposed. Don't worry about centering to user location:
+    // this latter behaviour will be achieved by AndroidView()'s update function using parameters 'centerOnUserLocation' and 'userLocation
     LifecycleStartEffect{
+        consoledebug("on start effect")
         onStopOrDispose {
-            centerLocation = map.mapCenter
+            consoledebug("on stop effect")
+            savedCenterLocation = map.mapCenter
+            savedZoom = map.zoomLevelDouble
         }
     }
 
@@ -463,12 +464,13 @@ fun Map(
             map.apply {
                 map.setScrollableAreaLimitLatitude(MapView.getTileSystem().maxLatitude, MapView.getTileSystem().minLatitude, 0)
                 map.setScrollableAreaLimitLongitude(MapView.getTileSystem().minLongitude, MapView.getTileSystem().maxLongitude, 0)
+                setMultiTouchControls(true)
 
                 minZoomLevel = 3.0
 
                 //set MapView's Zoom Buttons such that they are always visible in the bottom left corner, just
                 // on top of the user location button
-                zoomController.setVisibility(CustomZoomButtonsController.Visibility.ALWAYS)
+                zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
                 zoomController.display.apply {
                     setPositions(
                         false,
@@ -478,8 +480,9 @@ fun Map(
                     setAdditionalPixelMargins(0f,0f,0f, density.run { 80.dp.toPx() })
                     setMarginPadding(1/2f, 1/3f)
                 }
-                setMultiTouchControls(true)
+
                 overlays.run {
+
                     /////////////////////////////////////
                     //THE ADD OF THE MARKER HAS TO BE THE FIRST, BECAUSE IT WILL BE REFERRED LATELY BY ITS
                     // INDEX/POSITION IN THE LIST,
@@ -492,6 +495,19 @@ fun Map(
                             )
                         })
                     }
+                    add(ScaleBarOverlay(map).apply {
+                        setAlignBottom(true)
+                        drawLongitudeScale(true)
+                        drawLatitudeScale(false)
+                        with(density){
+                            setScaleBarOffset(20.dp.toPx().toInt(), 220.dp.toPx().toInt())
+                        }
+                        setBackgroundPaint(android.graphics.Paint().apply {
+                            color = Color.Gray.hashCode()
+                            alpha = 100
+                        })
+                    })
+
                     for (mode in Measure.values()) add(mode.ordinal, SquaredZonesOverlay2( ctx,
                         when(mode){
                             Measure.sound -> soundAvgs
@@ -501,9 +517,10 @@ fun Map(
                         mode
                         ))
                 }
+
                 controller.run {
-                    setZoom(12.5)
-                    setCenter(centerLocation)
+                    setZoom(savedZoom)
+                    setCenter(savedCenterLocation)
                 }
 
                 //Older implementation, kept here for roll-back purposes
