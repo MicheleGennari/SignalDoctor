@@ -3,6 +3,7 @@ package com.example.signaldoctor.screens
 import android.content.Context
 import android.content.res.Resources.NotFoundException
 import android.location.Location
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -29,6 +30,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text2.input.TextFieldState
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,6 +60,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -119,6 +123,7 @@ fun MapScreen(
     mapScreenVM: MyViewModel = hiltViewModel(),
     navigateToSettings : () -> Unit = {}
     ){
+
     SignalDoctorTheme {
 
         
@@ -139,9 +144,16 @@ fun MapScreen(
             when(isGranted) {
                 true -> {
                     consoledebug("Location Permission GRANTED")
-                    mapScreenVM.locationUpdatesOn()
+                    //mapScreenVM.locationUpdatesOn()
                 }
                 false -> consoledebug("Location Permission DENIED")
+            }
+        }
+        DisposableEffect(locationPermission.status.isGranted){
+            if(locationPermission.status.isGranted)
+                mapScreenVM.locationUpdatesOn()
+            onDispose {
+                mapScreenVM.locationUpdatesOff()
             }
         }
 
@@ -152,15 +164,7 @@ fun MapScreen(
             }
         }
 
-        DisposableEffect(locationPermission.status.isGranted){
-            if(locationPermission.status.isGranted)
-                mapScreenVM.locationUpdatesOn()
-            onDispose {
-                if(!mapScreenVM.areLocationUpdatesOn()){
-                    mapScreenVM.locationUpdatesOff()
-                }
-            }
-        }
+
 
         val currentNetworkMode by mapScreenVM.networkMode.collectAsStateWithLifecycle()
         val currentMsrType by mapScreenVM.mapScreenUiState.currentMsrType.collectAsStateWithLifecycle()
@@ -215,9 +219,7 @@ fun MapScreen(
                         alignment = Alignment.Center,
                         text = searchBarQuery,
                         showHints = showHints,
-                        onActiveChange = {
-                                         mapScreenVM.mapScreenUiState.setShowHints(it)
-                        },
+                        onActiveChange = { mapScreenVM.mapScreenUiState.setShowHints(it) },
                         onClickHint = { hint ->
                             mapScreenVM.mapScreenUiState.setScreenLocation(hint.latitude, hint.longitude)
                             mapScreenVM.mapScreenUiState.updateSearchBarQuery(hint.locationName)
@@ -234,7 +236,7 @@ fun MapScreen(
                         onQueryChange = { updatedQuery ->
                             mapScreenVM.mapScreenUiState.updateSearchBarQuery(updatedQuery)
                         },
-                        onQueryCancel = {mapScreenVM.mapScreenUiState.updateSearchBarQuery("")},
+                        onQueryCancel = { mapScreenVM.mapScreenUiState.updateSearchBarQuery("") },
                         onSearch = { query ->
                             QueryAddressTranslator.getCoordFromQuery(query)?.run {
                                     mapScreenVM.mapScreenUiState.setScreenLocation(
@@ -286,14 +288,10 @@ fun MapScreen(
                     ){
                         NetworkModeToggleButton(
                             checked = currentNetworkMode == NetworkMode.ONLINE,
+                            enabled = isInternetAvailable,
                             onCheckedChange = {
-                                if (!(
-                                            currentNetworkMode == NetworkMode.OFFLINE
-                                                    && !isInternetAvailable
-                                            )
-                                ) {
-                                    mapScreenVM.switchNetworkMode()
-                                }
+                                mapScreenVM.switchNetworkMode()
+
                             }
                         )
                     }
@@ -729,10 +727,12 @@ fun SearchBarHints(
     onEmpty : ( @Composable () -> Unit)? = null
 ){
 
-    Column(
+    LazyColumn(
         modifier = modifier
     ){
-        for (hint in hints) {
+        items(hints, { hint ->
+            hint.locationName
+        }){ hint ->
             ListItem(
                 modifier = Modifier.clickable {
                     onClickHint(hint)
@@ -747,9 +747,28 @@ fun SearchBarHints(
                 thickness = Dp.Hairline
             )
         }
-        if (hints.isEmpty() && onEmpty != null) onEmpty()
-    }
 
+       /* for (hint in hints) {
+
+            key(hint.latitude,hint.longitude){
+                ListItem(
+                    modifier = Modifier.clickable {
+                        onClickHint(hint)
+                    },
+                    headlineContent = {
+                        Text(
+                            color = hintsColor,
+                            text = hint.locationName
+                        )
+                    })
+                Divider(
+                    thickness = Dp.Hairline
+                )
+            }
+        }*/
+
+    }
+    if (hints.isEmpty() && onEmpty != null) onEmpty()
 }
 
 
@@ -1028,7 +1047,7 @@ fun Context.launchToast(resId: Int? = null, message: String, duration: Int = Toa
     if(resId != null) try{
         Toast.makeText(this, resId, duration).show()
     } catch (e : NotFoundException){
-        e.printStackTrace()
+        Log.e("launchToast() in MapScreen.kt", "string of toast not found in resources", e)
     }
     else
         Toast.makeText(this, message, duration).show()

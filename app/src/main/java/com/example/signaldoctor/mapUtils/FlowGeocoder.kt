@@ -62,6 +62,7 @@ class FlowGeocoder @Inject constructor(
                 10
             ) ?: emptyList()
         }catch (e : IOException){
+            Log.e("FlowGeocoder", " something went wrong while asking for addresses", e)
             e.printStackTrace()
             emptyList()
         }

@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.TaskStackBuilder
 import androidx.core.net.toUri
@@ -18,7 +19,7 @@ import com.example.signaldoctor.appComponents.MsrsWorkManager
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.DestinationsInfo
 import com.example.signaldoctor.contracts.Measure
-import com.example.signaldoctor.screens.msrTypeWhen
+import com.example.signaldoctor.screens.whenMsrType
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.example.signaldoctor.utils.getMeasureSettings
 import dagger.hilt.android.AndroidEntryPoint
@@ -63,9 +64,9 @@ class BackgroundMeasurementsService: LifecycleService() {
     }.shareIn(lifecycleScope, SharingStarted.WhileSubscribed())
 
 
-    private val phoneJob : Job? = null
-    private val noiseJob : Job? = null
-    private val wifiJob : Job? = null
+    private val phoneJob = Job()
+    private val noiseJob = Job()
+    private val wifiJob = Job()
 
     private fun launchSettingsScreenAction() : NotificationCompat.Action {
         val intent = Intent(
@@ -105,7 +106,7 @@ class BackgroundMeasurementsService: LifecycleService() {
             //action is STOP_BACKGROUND_ACTION if msrType is null, otherwise is bound to specific msrType
             action = if(msrType == null)
                         STOP_BACKGROUND_ACTION
-                else msrTypeWhen(
+                else whenMsrType(
                         msrType,
                         phone = START_PHONE_ACTION,
                         sound = START_NOISE_ACTION,
@@ -115,7 +116,7 @@ class BackgroundMeasurementsService: LifecycleService() {
 
         return NotificationCompat.Action.Builder(
             if(msrType != null)
-                msrTypeWhen(
+                whenMsrType(
                     msrType,
                     phone = R.drawable.phone_icon_notification,
                     sound = R.drawable.ear_icon_notification,
@@ -199,7 +200,7 @@ class BackgroundMeasurementsService: LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
 
-
+        phoneJob.isActive
 
         when (intent?.action) {
 
@@ -217,7 +218,7 @@ class BackgroundMeasurementsService: LifecycleService() {
 
 
     private fun startBackgroundManager(msrType : Measure, startId: Int) : Job {
-        val thisMsrJob =msrTypeWhen(msrType,
+        val thisMsrJob =whenMsrType(msrType,
             phone = phoneJob,
             sound = noiseJob,
             wifi = wifiJob
@@ -238,6 +239,8 @@ class BackgroundMeasurementsService: LifecycleService() {
             appSettings.getMeasureSettings(msrType).periodicity
         }.distinctUntilChanged()
     ){ isBackgroundMsrOn, periodicity ->
+
+        Log.d("service measurement manager", "$msrType background measurement flow is running")
 
         if(!isBackgroundMsrOn)
             msrsWorkManager.cancelBackgroundMeasurement(msrType)

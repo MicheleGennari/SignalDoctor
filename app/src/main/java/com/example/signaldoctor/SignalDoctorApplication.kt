@@ -27,11 +27,6 @@ class SignalDoctorApplication : Application(), Configuration.Provider {
 
    @Inject lateinit var msrWorkersFactory: MsrWorkersFactory
 
-    override fun onCreate() {
-        super.onCreate()
-
-
-    }
     override fun getWorkManagerConfiguration(): Configuration =
         Configuration.Builder()
             .setWorkerFactory(msrWorkersFactory)

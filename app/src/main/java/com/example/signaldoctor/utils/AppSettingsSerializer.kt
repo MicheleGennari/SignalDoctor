@@ -3,9 +3,10 @@ package com.example.signaldoctor.utils
 import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
 import com.example.signaldoctor.AppSettings
+import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.contracts.Measure
-import com.example.signaldoctor.screens.msrTypeWhen
+import com.example.signaldoctor.screens.whenMsrType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import java.io.IOException
@@ -67,8 +68,8 @@ fun Long.toZoneDateTime(): ZonedDateTime = runCatching {
     ZonedDateTime.now()
 }
 
-fun AppSettings.getMeasureSettings(msrType: Measure) = run {
-    msrTypeWhen(
+fun AppSettings.getMeasureSettings(msrType: Measure): MeasurementSettings = run {
+    whenMsrType(
         msrType,
         phone = phoneSettings,
         sound = noiseSettings,

@@ -94,7 +94,7 @@ class NoiseMsrWorker @AssistedInject constructor(
         return if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ForegroundInfo(
             Measure.sound.ordinal,
             notificationWorker,
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE + ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION + ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         ) else ForegroundInfo(
             Measure.sound.ordinal,
             notificationWorker,

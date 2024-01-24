@@ -5,8 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
-import com.example.signaldoctor.contracts.Measure
-import com.example.signaldoctor.screens.msrTypeWhen
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -17,8 +15,7 @@ class BackgroundMeasurementsManager @Inject constructor(
 ) {
     fun start(action : String) =
         sendStartCommand(
-            Intent(app, BackgroundMeasurementsService::class.java)
-                .setAction(action)
+            Intent(app, BackgroundMeasurementsService::class.java).setAction(action)
         )
 
     fun stop(){
@@ -96,7 +93,7 @@ class BackgroundMeasurementsManager @Inject constructor(
                 ) ?: throw RuntimeException("BackgroundMeasurementService does not exist")
 
     }catch (e : RuntimeException){
-        e.printStackTrace()
+        Log.e("BackgroundMeasurementManager", " error sending startService()", e)
         null
     }
 

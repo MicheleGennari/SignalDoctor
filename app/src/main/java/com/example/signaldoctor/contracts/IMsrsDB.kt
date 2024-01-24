@@ -5,6 +5,7 @@ import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.Settings
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.PhoneMeasurement
+import com.example.signaldoctor.room.RoomMeasurementEntity
 import com.example.signaldoctor.room.SoundMeasurement
 import com.example.signaldoctor.room.WiFIMeasurement
 import com.example.signaldoctor.workers.MsrWorkersInputData

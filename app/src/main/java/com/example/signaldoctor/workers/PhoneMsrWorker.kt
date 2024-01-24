@@ -45,14 +45,12 @@ class PhoneMsrWorker @AssistedInject constructor(
 
     override suspend fun doWork() : Result{
 
-
         return if(!ctx.isLocationPermissionGranted()) Result.failure() else  {
 
             try{
                 setForeground(getForegroundInfo())
             }catch(e: IllegalStateException){
-                Log.e("PHONE MEASUREMENT WORKER ERROR", "Can't run as foreground services due to restrictions")
-                e.printStackTrace()
+                Log.e("PHONE MEASUREMENT WORKER ERROR", "Can't run as foreground services due to restrictions", e)
             }
 
             phoneWorkNewerBuilds(
@@ -76,7 +74,7 @@ class PhoneMsrWorker @AssistedInject constructor(
         return if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ForegroundInfo(
             Measure.phone.ordinal,
             workerNotification,
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE + ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         )
         else ForegroundInfo(
             Measure.phone.ordinal,

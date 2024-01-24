@@ -11,45 +11,42 @@ import java.io.IOException
 import java.util.Date
 
 
-fun DataStore<AppSettings>.update( coroutineScope : CoroutineScope, updater : AppSettings.Builder.() -> Unit){
-    coroutineScope.launch {
+suspend fun DataStore<AppSettings>.updateDSL( updater : suspend AppSettings.Builder.() -> Unit){
         try{
             updateData { appSettings ->
                 appSettings.updateAppSettings(updater)
             }
         }catch (e : Exception){
-            Log.e("AppSettings Datastore", "Something went wrong while writing on disk")
-            e.printStackTrace()
+            Log.e("AppSettings Datastore", "Something went wrong while writing on disk", e)
         }
-    }
 }
 
-fun AppSettings.updateAppSettings(
-    update : AppSettings.Builder.() -> Unit
+ suspend fun AppSettings.updateAppSettings(
+    update : suspend AppSettings.Builder.() -> Unit
 ) : AppSettings {
     return toBuilder().apply{
         update()
     }.build()
 }
 
-fun AppSettings.Builder.phoneSettings(
-    update : MeasurementSettings.Builder.() -> Unit
+ suspend fun AppSettings.Builder.phoneSettings(
+     update : suspend MeasurementSettings.Builder.() -> Unit
 ){
     phoneSettings = phoneSettings.toBuilder().apply{
         update()
     }.build()
 }
 
-fun AppSettings.Builder.noiseSettings(
-    update : MeasurementSettings.Builder.() -> Unit
+suspend fun AppSettings.Builder.noiseSettings(
+    update : suspend MeasurementSettings.Builder.() -> Unit
 ){
     noiseSettings = noiseSettings.toBuilder().apply{
         update()
     }.build()
 }
 
-fun AppSettings.Builder.wifiSettings(
-    update : MeasurementSettings.Builder.() -> Unit
+suspend fun AppSettings.Builder.wifiSettings(
+    update : suspend MeasurementSettings.Builder.() -> Unit
 ){
     wifiSettings = wifiSettings.toBuilder().apply{
         update()

@@ -1,6 +1,5 @@
 package com.example.signaldoctor.utils
 
-import android.location.Address
 import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
 import com.example.signaldoctor.LocalHints
@@ -8,7 +7,6 @@ import com.example.signaldoctor.searchBarHint.ProtoBuffHint
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.util.Locale
 
 class LocalHintsSerializer : Serializer<LocalHints> {
 
@@ -30,4 +28,4 @@ class LocalHintsSerializer : Serializer<LocalHints> {
     }
 }
 
-fun LocalHints.protoBufHints() = localHintsList.map { ProtoBuffHint(it) }
+fun LocalHints.protoBuffHints() = localHintsList.map { ProtoBuffHint(it) }

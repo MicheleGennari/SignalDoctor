@@ -1,45 +1,62 @@
 package com.example.signaldoctor.appComponents
 
 import android.annotation.SuppressLint
-import android.content.IntentSender
+import android.content.Context
 import android.location.Location
-import android.os.HandlerThread
 import android.os.Looper
-import androidx.constraintlayout.solver.widgets.Flow
-import com.example.signaldoctor.utils.Loggers.consoledebug
+import androidx.lifecycle.viewModelScope
+import com.example.signaldoctor.contracts.MeasuringState
+import com.example.signaldoctor.utils.Loggers
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.*
 import com.google.android.gms.tasks.CancellationTokenSource
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.android.asCoroutineDispatcher
-import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.channels.SendChannel
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import java.util.concurrent.Executors
-import java.util.logging.Handler
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 
 const val CHANGE_LOCATION_SETTINGS = 42
 
+const val LOCATION_GRANULARITY = 2000
+const val LOCATION_INTERVAL = 5000L
+const val LOCATION_PRIORITY = Priority.PRIORITY_BALANCED_POWER_ACCURACY
 
+@Singleton
 class FlowLocationProvider @Inject constructor(
     val provider: FusedLocationProviderClient,
     private val settingsClient : SettingsClient,
 ){
 
-    companion object {
 
+    companion object{
+        val defaultLocationUpdateSettings = LocationRequest.Builder(LOCATION_INTERVAL).setPriority(
+            LOCATION_PRIORITY
+        ).build()
     }
 
-    @SuppressLint("MissingPermission")
-    fun requestLocationUpdates(lr : LocationRequest) = callbackFlow<Location?> {
 
+
+    @SuppressLint("MissingPermission")
+    fun requestLocationUpdates(lr : LocationRequest = defaultLocationUpdateSettings) = callbackFlow<Location?> {
 
             val callback = object : LocationCallback() {
                 override fun onLocationResult(p0: LocationResult) {
@@ -65,7 +82,7 @@ class FlowLocationProvider @Inject constructor(
                 provider.removeLocationUpdates(callback)
             }
 
-    }
+    }.conflate().distinctUntilChanged()
 
      suspend fun checkLocationSettings(lr: LocationRequest, mainActivity: MainActivity) =
          suspendCancellableCoroutine { continuation->

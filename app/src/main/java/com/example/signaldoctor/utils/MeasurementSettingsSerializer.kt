@@ -38,7 +38,7 @@ class MeasurementSettingsSerializer() : Serializer<MeasurementSettings> {
     }
 }
 
-fun initializeMeasurementSettings() = MeasurementSettings
+fun initializeMeasurementSettings(): MeasurementSettings = MeasurementSettings
     .getDefaultInstance().toBuilder().apply {
 
         isBackgroundMsrOn = IS_BACKGROUND_ON_DEFAULT

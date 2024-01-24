@@ -8,9 +8,7 @@ import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
-import androidx.work.Logger
 import androidx.work.WorkerParameters
-import androidx.work.hasKeyWithValueOfType
 import androidx.work.workDataOf
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.R
@@ -20,18 +18,13 @@ import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.PhoneMeasurement
 import com.example.signaldoctor.room.SoundMeasurement
-import com.example.signaldoctor.room.TableColumn
 import com.example.signaldoctor.room.WiFIMeasurement
-import com.example.signaldoctor.screens.msrTypeWHen
-import com.example.signaldoctor.utils.Loggers
 import com.example.signaldoctor.utils.Loggers.consoledebug
-import com.example.signaldoctor.utils.Loggers.hashCode
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import javax.inject.Inject
 
 const val POST_MSR_NOTIFICATION_ID = 2
 const val MEASUREMENT_KEY = "Measurement"
@@ -49,8 +42,7 @@ class PostMsrWorker  @AssistedInject constructor(
         try{
             setForeground(getForegroundInfo())
         }catch(e: IllegalStateException){
-            Log.e("POST MEASUREMENT WORKER ERROR", "Can't run as foreground service due to restrictions")
-            e.printStackTrace()
+            Log.e("POST MEASUREMENT WORKER ERROR", "Can't run as foreground service due to restrictions", e)
         }
         setProgress(workDataOf(NoiseMsrWorker.Progress to 9/10f))
         consoledebug("DEBUGG")

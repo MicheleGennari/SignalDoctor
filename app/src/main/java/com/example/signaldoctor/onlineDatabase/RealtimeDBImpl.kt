@@ -1,37 +1,35 @@
 package com.example.signaldoctor.onlineDatabase
 
 import android.location.Location
+import android.util.Log
 import androidx.core.util.rangeTo
 import com.example.signaldoctor.MeasurementSettings
-import com.example.signaldoctor.Settings
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MsrsMap
 import com.example.signaldoctor.mapUtils.CoordConversions.tileIndexFromLocation
-import com.example.signaldoctor.realtimeFirebase.PhoneMeasurementFirebase
-import com.example.signaldoctor.realtimeFirebase.SoundMeasurementFirebase
-import com.example.signaldoctor.realtimeFirebase.WifiMeasurementFirebase
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.PhoneMeasurement
 import com.example.signaldoctor.room.RoomMeasurementEntity
 import com.example.signaldoctor.room.SoundMeasurement
 import com.example.signaldoctor.room.WiFIMeasurement
-import com.example.signaldoctor.screens.msrTypeWhen
-import com.example.signaldoctor.utils.Loggers
-import com.example.signaldoctor.utils.Loggers.consoledebug
-import com.example.signaldoctor.workers.printAndReturn
+import com.example.signaldoctor.screens.whenMsrType
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ktx.getValue
 import com.google.firebase.database.ktx.snapshots
-import com.google.firebase.database.ktx.values
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.osmdroid.views.MapView
+import java.lang.IllegalArgumentException
+import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Calendar
 import java.util.Date
 import javax.inject.Inject
 import kotlin.coroutines.resume
@@ -81,7 +79,13 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
     //function that takes only the first msrsToTake measurements if useMsrsToTake is true
     private fun <T> List<T>.msrsToTake(settings: MeasurementSettings) = apply { if (settings.useMsrsToTake) take(settings.msrsToTake) }
 
-    private fun MeasurementBase.isInTimeRange(settings: MeasurementSettings) = Date(settings.oldness).rangeTo(Date(settings.freshness)).contains(this.date)
+    private fun MeasurementBase.isInTimeRange(settings: MeasurementSettings) = try{
+        Date(settings.oldness).rangeTo(Date(settings.freshness)).contains(this.date)
+    }catch (e : IllegalArgumentException){
+        Log.e("RealtimeDBIml isInTimeRange()", "Filtering measurements by time range reported error because " +
+                "oldness is actually greater than freshness", e)
+        false
+    }
 
     private fun phoneMsrsFilter(settings: MeasurementSettings) : List<PhoneMeasurement>.() -> List<PhoneMeasurement> {
         return  {
@@ -123,7 +127,7 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
 
 
     override fun getOldestDate(msrType: Measure) = db.reference.child(
-        msrTypeWhen(msrType,
+        whenMsrType(msrType,
             phone = PHONE_TABLE_PATH,
             sound = SOUND_TABLE_PATH,
             wifi = WIFI_TABLE_PATH
@@ -156,7 +160,7 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
                 }
         }.map { measurementsSnap ->
             measurementsSnap.mapNotNull { measurementSnap ->
-                msrTypeWhen(msrType,
+                whenMsrType(msrType,
                     phone =  measurementSnap.getValue<PhoneMeasurement>()?.firebaseTable?.baseInfo,
                     sound =  measurementSnap.getValue<SoundMeasurement>()?.firebaseTable?.baseInfo,
                     wifi =  measurementSnap.getValue<WiFIMeasurement>()?.firebaseTable?.baseInfo
@@ -168,36 +172,44 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
     }
 
 
-    private inline fun <reified T : RoomMeasurementEntity> postMsr(msr : T) : Boolean{
+    private fun postMsr(msrType: Measure, msr : RoomMeasurementEntity) : Boolean{
         val dbTileIndex = msr.firebaseTable.baseInfo.tileIndex
         val uuid = msr.firebaseTable.baseInfo.uuid
-        db.reference.child("measurements/phone").child("$dbTileIndex").child("$uuid")//.push()
+        db.reference.msrTypePath(msrType).child("$dbTileIndex").child("$uuid")//.push()
             .setValue(msr)
         return true
     }
+    private fun DatabaseReference.msrTypePath(msrType: Measure) = child(whenMsrType(msrType,
+        phone = PHONE_TABLE_PATH,
+        sound = SOUND_TABLE_PATH,
+        wifi = WIFI_TABLE_PATH
+    ))
 
 
     override fun postPhoneMsr(phoneMeasurement: PhoneMeasurement): Boolean {
+
         val dbTileIndex = phoneMeasurement.firebaseTable.baseInfo.tileIndex
         val uuid = phoneMeasurement.firebaseTable.baseInfo.uuid
-        db.reference.child("measurements/phone").child("$dbTileIndex").push()
-            .setValue(phoneMeasurement)
+        db.reference.msrTypePath(Measure.phone).child("$dbTileIndex").push()
+            .setValue("$uuid" to phoneMeasurement)
         return true
     }
 
     override fun postSoundMsr(soundMeasurement: SoundMeasurement): Boolean {
         val dbTileIndex = soundMeasurement.firebaseTable.baseInfo.tileIndex
         val uuid = soundMeasurement.firebaseTable.baseInfo.uuid
-        db.reference.child("measurements/sound").child("$dbTileIndex").push()
-            .setValue(soundMeasurement)
+        db.reference.msrTypePath(Measure.sound).child("$dbTileIndex").push()
+            .setValue("$uuid" to soundMeasurement)
         return true
     }
 
     override fun postWifiMsr(wifiMeasurement: WiFIMeasurement): Boolean {
         val dbTileIndex = wifiMeasurement.firebaseTable.baseInfo.tileIndex
         val uuid = wifiMeasurement.firebaseTable.baseInfo.uuid
-        db.reference.child("measurements/wifi").child("$dbTileIndex").push()
-            .setValue(wifiMeasurement)
+
+        val map = mapOf("$uuid" to wifiMeasurement)
+        db.reference.msrTypePath(Measure.wifi).child("$dbTileIndex")
+            .setValue("$uuid" to wifiMeasurement)
         return true
     }
 

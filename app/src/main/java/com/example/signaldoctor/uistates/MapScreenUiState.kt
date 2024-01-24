@@ -13,12 +13,14 @@ import com.example.signaldoctor.searchBarHint.ISearchBarHint
 import com.example.signaldoctor.utils.Loggers
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.example.signaldoctor.utils.addHint
-import com.example.signaldoctor.utils.protoBufHints
+import com.example.signaldoctor.utils.protoBuffHints
 import com.example.signaldoctor.workers.printAndReturn
+import dagger.hilt.android.scopes.ViewModelScoped
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -27,11 +29,13 @@ import kotlinx.coroutines.time.debounce
 import java.time.Duration
 import javax.inject.Inject
 
+@ViewModelScoped
 class MapScreenUiState @Inject constructor(
     private val localHintsDataStore: DataStore<LocalHints>,
    @AndroidGeocoder geocoder: IFlowGeocoder
 
 ) {
+
 
     private val _screenLocation = MutableStateFlow<Location?>(null)
     val screenLocation = _screenLocation.asStateFlow()
@@ -77,8 +81,8 @@ class MapScreenUiState @Inject constructor(
 
 
     val localSearchBarHints = combine(
-        searchBarQuery,
-        localHintsDataStore.data.flowOn(Dispatchers.IO).map { it.protoBufHints() }
+        searchBarQuery.debounce(Duration.ofSeconds(1)),
+        localHintsDataStore.data.flowOn(Dispatchers.IO).map { it.protoBuffHints() }
         ){ query, localHints ->
         localHints.filter { localHint ->
             localHint.locationName.contains(query, true)
@@ -94,11 +98,12 @@ class MapScreenUiState @Inject constructor(
             setIsSearchBarLoading(true)
         }.debounce(Duration.ofSeconds(1)).flowOn(Dispatchers.Default).map{ query ->
             geocoder.getAddressesFromLocationName(query).also {
-                Loggers.consoledebug("a geocoder call has been completed")
-            }.geocoderHints()
-        }.flowOn(Dispatchers.IO).onEach {
-            setIsSearchBarLoading(false)
-        }.filterNotNull()
+                consoledebug("a geocoder call has been completed")
+            }
+        }.flowOn(Dispatchers.IO).map{it.geocoderHints()}
+            .onEach {
+                setIsSearchBarLoading(false)
+             }.filterNotNull()
 
 
     private val _searchbarShowHints = MutableStateFlow(false)

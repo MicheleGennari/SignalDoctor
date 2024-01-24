@@ -40,10 +40,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withRunningRecomposer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -74,11 +78,11 @@ import com.example.signaldoctor.utils.toEpochMillis
 import com.example.signaldoctor.utils.toZoneDateTime
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.rememberPermissionState
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZonedDateTime
+import java.util.Date
 import kotlin.math.roundToInt
 
 
@@ -92,6 +96,8 @@ fun SettingsScreen(
 
     val mainActivity = LocalContext.current as MainActivity
 
+    val isUserLocationAvailable by settingsScreenVM.isUserLocationAvailable.collectAsStateWithLifecycle()
+
     val runBaseMeasurementPermission = rememberBaseMeasurementsPermissionState()
 
     val runNoiseMeasurementPermission = rememberNoiseMeasurementPermissionState()
@@ -100,7 +106,26 @@ fun SettingsScreen(
 
     val recordPermission = rememberRecordPermissionState()
 
-    val locationPermission = rememberLocationPermissionState()
+    val canRunBaseMeasurement by
+        remember{ derivedStateOf { runBaseMeasurementPermission.allPermissionsGranted && isUserLocationAvailable } }
+
+
+    val canRunNoiseMeasurement by remember{ derivedStateOf { runNoiseMeasurementPermission.allPermissionsGranted && isUserLocationAvailable }}
+
+    val locationPermission = rememberLocationPermissionState{ isGranted ->
+        if(isGranted) {
+            consoledebug("location permissions granted")
+            settingsScreenVM.locationUpdatesOn()
+        }
+        else consoledebug("locations permissions denied")
+    }
+    DisposableEffect(locationPermission.status.isGranted){
+        if(locationPermission.status.isGranted)
+            settingsScreenVM.locationUpdatesOn()
+        onDispose {
+            settingsScreenVM.locationUpdatesOff()
+        }
+    }
 
     val phoneSettings by settingsScreenVM.phoneSettings.collectAsStateWithLifecycle()
 
@@ -129,6 +154,7 @@ fun SettingsScreen(
                 modifier = Modifier
                     .padding(contentPadding)
                     .padding(15.dp),
+                msrType = currentSettingsList,
                 title = "${currentSettingsList.name} Settings".replaceFirstChar { it.uppercase() },
                 measurementSettings = when(currentSettingsList){
                     Measure.wifi -> wifiSettings
@@ -152,11 +178,11 @@ fun SettingsScreen(
                         msrsToTake = it
                     }
                 },
-                isBackgroundSwitchEnabled =
-                (if(currentSettingsList == Measure.sound)
+                isBackgroundSwitchEnabled = if(currentSettingsList == Measure.sound) canRunNoiseMeasurement else canRunBaseMeasurement
+                /*(if(currentSettingsList == Measure.sound)
                         runNoiseMeasurementPermission.allPermissionsGranted
                 else
-                    runBaseMeasurementPermission.allPermissionsGranted)
+                    runBaseMeasurementPermission.allPermissionsGranted) && isUserLocationAvailable*/
                /*(currentSettingsList != Measure.sound || recordPermission.status.isGranted)
                         && locationPermission.status.isGranted*/,
                 onIsBackgroundOnChange = {
@@ -314,6 +340,7 @@ fun SettingsTab(
 @Composable
 fun MeasurementSettingsList(
     modifier: Modifier = Modifier,
+    msrType: Measure = Measure.phone,
     title : String = "Placeholder title",
     measurementSettings: MeasurementSettings = MeasurementSettings.getDefaultInstance(),
     titleFontSize : TextUnit = 6.em,
@@ -345,7 +372,7 @@ fun MeasurementSettingsList(
         OptionalSliderSetting(
             checkMode = OptionalSliderDefaults.CheckMethod.SWITCH,
             value = measurementSettings.periodicity,
-            checked = isBackgroundSwitchEnabled && measurementSettings.isBackgroundMsrOn,
+            checked = measurementSettings.isBackgroundMsrOn && isBackgroundSwitchEnabled,
             onChecked = if(isBackgroundSwitchEnabled) onIsBackgroundOnChange else onIsBackgroundOnChangeWhenDisabled,
             description = "Background measurement",
             valueText ="every "+ when (measurementSettings.periodicity) {
@@ -371,6 +398,7 @@ fun MeasurementSettingsList(
         )
 
         divider()
+        key(msrType.ordinal){
             RangeDatePickerSetting(
                 description = "Select the time range for evaluating averages",
                 freshness = measurementSettings.freshness,
@@ -378,7 +406,7 @@ fun MeasurementSettingsList(
                 onFreshnessChange = onFreshnessChange,
                 onOldnessChange = onOldnessChange
             )
-
+        }
     }
 
 }
@@ -437,6 +465,7 @@ fun OptionalSliderSetting(
     optionDescriptionFontSize : TextUnit = 4.em,
 ){
 
+        consoledebug("I'm getting recomposed")
 
         Text(
             fontSize = optionDescriptionFontSize,
@@ -500,28 +529,22 @@ fun RangeDatePickerSetting(
         Row{
 
             PickerToggableDialog(
-                modifier= modifier.weight(5 / 10f),
-                date = oldness,
-                title = "to",
-                onDateChange = onOldnessChange,
-                dateValidator = {
-                    if (it <= freshness && dateValidator(it)) {
-                        onOldnessChange(it)
-                        true
-                    } else false
-                }
-            )
-
-            PickerToggableDialog(
                 modifier = modifier.weight(5 / 10f),
                 date = freshness,
                 title = "from",
                 onDateChange = onFreshnessChange,
                 dateValidator = {
-                    if (it >= oldness && dateValidator(it)) {
-                        onFreshnessChange(it)
-                        true
-                    } else false
+                    it >= oldness && dateValidator(it)
+                }
+            )
+
+            PickerToggableDialog(
+                modifier= modifier.weight(5 / 10f),
+                date = oldness,
+                title = "to",
+                onDateChange = onOldnessChange,
+                dateValidator = {
+                    it <= freshness && dateValidator(it)
                 }
             )
 
@@ -736,7 +759,7 @@ fun stopBackgroundMeasurement(msrType: Measure) : Boolean {
 
 }
 
-fun <T>msrTypeWhen(
+fun <T>whenMsrType(
     currentMsrType : Measure,
     phone : T,
     sound : T,
@@ -749,7 +772,7 @@ fun <T>msrTypeWhen(
     }
 }
 
-fun msrTypeWHen(
+fun msrTypeWhen(
     currentMsrType: Measure,
     phone : () -> Unit,
     sound : () -> Unit,
@@ -761,6 +784,22 @@ fun msrTypeWHen(
         Measure.sound -> sound()
     }
 }
+
+suspend fun msrTypeWhenSuspend(
+    currentMsrType: Measure,
+    phone : suspend  () -> Unit,
+    sound : suspend () -> Unit,
+    wifi : suspend () -> Unit
+){
+    when(currentMsrType){
+        Measure.phone -> phone()
+        Measure.wifi -> wifi()
+        Measure.sound -> sound()
+    }
+}
+
+@Composable
+fun <T> rememberedDerivedStateOf(block : () -> T) = remember{ derivedStateOf(block)}
 
 
 fun Long.toLocalDate(): LocalDate = toZoneDateTime().toLocalDate()

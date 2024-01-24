@@ -29,10 +29,12 @@ android {
     }
 
     buildTypes {
+
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+
     }
     compileOptions {
 
@@ -138,6 +140,9 @@ dependencies {
     implementation('com.google.protobuf:protobuf-lite:3.0.0')
 
     implementation("com.google.code.gson:gson:2.10.1")
+
+    //for detecting leaks
+    debugImplementation("com.squareup.leakcanary:leakcanary-android:3.0-alpha-1")
 
 }
 

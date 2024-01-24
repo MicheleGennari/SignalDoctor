@@ -98,7 +98,7 @@ class WifiMsrWorker @AssistedInject constructor(
         return if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ForegroundInfo(
             Measure.wifi.ordinal,
            workerNotification,
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE + ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         )
         else ForegroundInfo(
             Measure.wifi.ordinal,
@@ -144,6 +144,7 @@ class WifiMsrWorker @AssistedInject constructor(
                 msr += wifiSignalStrength(cm)
                 delay(1000)
             }catch (e : IOException){
+                Log.e("WifiMsrWorker", "problems reading wifi signal strength", e)
                 Result.failure()
             }
         }

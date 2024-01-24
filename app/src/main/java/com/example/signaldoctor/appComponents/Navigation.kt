@@ -12,6 +12,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.runtime.remember
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -23,6 +24,7 @@ import com.example.signaldoctor.screens.MapScreen
 import com.example.signaldoctor.screens.SettingsScreen
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import dagger.hilt.android.AndroidEntryPoint
+import leakcanary.AppWatcher
 import org.osmdroid.config.Configuration.getInstance
 
 @AndroidEntryPoint
@@ -80,13 +82,13 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     ) { backStackEntry ->
-
+                        /*
                         val parent = remember(backStackEntry){
                             navController.getBackStackEntry(DestinationsInfo.DestinationGraphMain.route)
-                        }
+                        }*/
 
                         SettingsScreen(
-                            settingsScreenVM = hiltViewModel(parent),
+                            //settingsScreenVM = hiltViewModel(parent),
                             onNavigationBack = {
                                 /*
                                 val navDirections = DestinationsInfo.MapScreen.run {

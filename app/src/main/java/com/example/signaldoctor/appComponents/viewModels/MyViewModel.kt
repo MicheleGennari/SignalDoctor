@@ -23,7 +23,7 @@ import com.example.signaldoctor.hiltModules.AndroidGeocoder
 import com.example.signaldoctor.mapUtils.IFlowGeocoder
 import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.room.MeasurementBase
-import com.example.signaldoctor.screens.msrTypeWhen
+import com.example.signaldoctor.screens.whenMsrType
 import com.example.signaldoctor.searchBarHint.ISearchBarHint
 import com.example.signaldoctor.searchBarHint.ProtoBuffHint
 import com.example.signaldoctor.uistates.MapScreenUiState
@@ -31,6 +31,7 @@ import com.example.signaldoctor.utils.AppNotificationManager
 import com.example.signaldoctor.utils.Loggers.consoledebug
 import com.example.signaldoctor.utils.not
 import com.example.signaldoctor.utils.updateAppSettings
+import com.example.signaldoctor.utils.updateDSL
 import com.example.signaldoctor.workers.NoiseMsrWorker
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.Priority
@@ -43,9 +44,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.combineTransform
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filterNotNull
@@ -58,6 +59,7 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.withIndex
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
@@ -71,9 +73,6 @@ const val POST_MSR_WORK_TAG = "postMsrWOrkTag"
 const val POST_MSR_ACTIVE_WORK_NAME = "postMsrActiveWork"
 const val POST_MSR_BACKGROUND_WORK_NAME = "postMsrBackgroundWork"
 
-const val LOCATION_GRANULARITY = 2000
-const val LOCATION_INTERVAL = 5000L
-const val LOCATION_PRIORITY = Priority.PRIORITY_BALANCED_POWER_ACCURACY
 
 const val MEASUREMENT_NOTIFICATION_CHANNEL_ID = "MEASUREMENT_CHANNEL"
 
@@ -135,7 +134,7 @@ open class MyViewModel @Inject constructor(
     private fun backgroundMeasurementsManager(msrType: Measure) = combine(
         //flow #1 of combine
         settingsDataStore.data.flowOn(Dispatchers.IO).map {
-            msrTypeWhen(msrType,
+            whenMsrType(msrType,
                 phone = it.phoneSettings,
                 sound = it.noiseSettings.takeIf { permissionsChecker.isRecordingGranted() },
                 wifi = it.wifiSettings
@@ -143,7 +142,7 @@ open class MyViewModel @Inject constructor(
         }.flowOn(Dispatchers.IO).distinctUntilChanged(),
         //flow #2 of combine
         settingsDataStore.data.flowOn(Dispatchers.IO).map {
-            msrTypeWhen(msrType,
+            whenMsrType(msrType,
                 phone = it.phoneSettings,
                 sound = it.noiseSettings,
                 wifi = it.wifiSettings
@@ -164,15 +163,12 @@ open class MyViewModel @Inject constructor(
 
         viewModelScope.launch(Dispatchers.IO) {
             try{
-                settingsDataStore.updateData { settingsSnap ->
-                    settingsSnap.updateAppSettings {
-                        lastLocationLat = newLocation.latitude
-                        lastLocationLon = newLocation.longitude
-                    }
+                settingsDataStore.updateDSL {
+                    lastLocationLat = newLocation.latitude
+                    lastLocationLon = newLocation.longitude
                 }
             }catch (e : IOException){
-                Log.e("AppSettings DataStore", "IO Exception while writing last location coordinates")
-                e.printStackTrace()
+                Log.e("AppSettings DataStore", "IO Exception while writing last location coordinates", e)
             }
         }
 
@@ -213,9 +209,6 @@ open class MyViewModel @Inject constructor(
     val measurementProgress = _measurementProgress.asStateFlow()
 
 
-    private val locationUpdateSettings = LocationRequest.Builder(LOCATION_INTERVAL).setPriority(LOCATION_PRIORITY)
-        .build()
-
 
     private val _userLocation : MutableStateFlow<Location?> = MutableStateFlow(null)
     val userLocation = _userLocation.asStateFlow()
@@ -243,8 +236,7 @@ open class MyViewModel @Inject constructor(
         .stateIn(viewModelScope, started = SharingStarted.WhileSubscribed(), initialValue = listOf())
     */
 
-    private var locationUpdatesJob : Job? = null
-    fun areLocationUpdatesOn() = locationUpdatesJob?.job?.isActive ?: false
+    private var locationUpdatesJob : Job = Job()
 
     val arePhoneMsrsDated = areMsrsDated(Measure.phone)
     val areNoiseMsrsDated = areMsrsDated(Measure.sound)
@@ -310,52 +302,45 @@ open class MyViewModel @Inject constructor(
 
      fun checkLocationSettings(mainActivity: MainActivity) = viewModelScope.launch {
            // userLocation.value?.let { MapView.getTileSystem().tileIndexFromLocation(it )}
-            locationProvider.checkLocationSettings(locationUpdateSettings, mainActivity)
+            locationProvider.checkLocationSettings(FlowLocationProvider.defaultLocationUpdateSettings, mainActivity)
     }
 
 
     fun locationUpdatesOn() {
 
-        locationUpdatesJob?.let { job ->
-            if(job.isActive) return
-        }
-
-        locationUpdatesJob = locationProvider.requestLocationUpdates(locationUpdateSettings).onCompletion {
+        locationUpdatesJob = locationProvider.requestLocationUpdates(FlowLocationProvider.defaultLocationUpdateSettings).onCompletion {
                 consoledebug("locations updates are cancelled")
-                _userLocation.value = null
+                _userLocation.update { null }
                 it?.printStackTrace()
-            }.distinctUntilChanged().onEach{ newLocation->
+            }.onEach{ newLocation->
 
-                _userLocation.value = newLocation
+                consoledebug("MyViewModel location updates are on")
+
+                _userLocation.update { newLocation }
 
                 if(newLocation!=null)
                     setLastLocationUserSettings(newLocation)
                 else {
                     //this ensures that measurements stop when user location is not available
                     mapScreenUiState.changeMeasuringState(MeasuringState.STOP)
-                    msrsWorkManager.cancelAllOneTimeMeasurements()
+                    msrsWorkManager.cancelAllMeasurements()
                 }
             }.launchIn(viewModelScope)
 
     }
     fun locationUpdatesOff(){
-        locationUpdatesJob?.run {
-            cancel("location updates off")
-        }
+        if(locationUpdatesJob.job.isActive)
+            locationUpdatesJob.cancel()
     }
 
     val isNetworkAvailable = connectivityManager.internetAvailabilityUpdates().onEach {
          //if internet is not available, app's network mode is immediately set to OFFLINE
          if(!it){
-             settingsDataStore.updateData { settingsSnap ->
-                 settingsSnap.toBuilder().setNetworkMode(NetworkMode.OFFLINE).build()
+             settingsDataStore.updateDSL {
+                 networkMode = NetworkMode.OFFLINE
              }
          }
-    }.stateIn(
-        scope= viewModelScope,
-        started= SharingStarted.WhileSubscribed(),
-        initialValue = false
-    )
+    }.stateIn(scope= viewModelScope, started= SharingStarted.WhileSubscribed(), initialValue = false)
 
     fun getLocationNameFromUserLocation() {
         userLocation.value?.let { location ->
@@ -377,19 +362,13 @@ open class MyViewModel @Inject constructor(
     }
 
     fun switchNetworkMode() {
-
         consoledebug("${isNetworkAvailable.value}")
-        viewModelScope.launch(Dispatchers.IO){
 
-            settingsDataStore.updateData { settingsSnap ->
-                settingsSnap.updateAppSettings {
-                    networkMode = !networkMode
-                }
+        viewModelScope.launch(Dispatchers.IO) {
+            settingsDataStore.updateDSL {
+                networkMode = !networkMode
             }
-        }.invokeOnCompletion { e ->
-            e?.printStackTrace()
         }
-
     }
 
 
@@ -416,12 +395,12 @@ open class MyViewModel @Inject constructor(
             }.onEach { workInfo ->
 
                 when(workInfo.state){
-                    WorkInfo.State.RUNNING -> _measurementProgress.value = workInfo.progress.getFloat(NoiseMsrWorker.Progress, 0f)
+                    WorkInfo.State.RUNNING -> _measurementProgress.update { workInfo.progress.getFloat(NoiseMsrWorker.Progress, 0f) }
                     WorkInfo.State.SUCCEEDED -> when(msrType){
                         Measure.sound -> _lastNoiseMsr
                         Measure.wifi -> _lastWifiMsr
                         Measure.phone -> _lastPhoneMsr
-                    }.value = workInfo.outputData.getInt(MeasurementBase.MSR_KEY, 0)
+                    }.update { workInfo.outputData.getInt(MeasurementBase.MSR_KEY, 0) }
                     WorkInfo.State.FAILED -> {}
                     else -> {}
                 }

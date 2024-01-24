@@ -9,7 +9,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.example.signaldoctor.contracts.Measure
-import com.example.signaldoctor.screens.msrTypeWhen
+import com.example.signaldoctor.screens.whenMsrType
 import com.example.signaldoctor.workers.NoiseMsrWorker
 import com.example.signaldoctor.workers.PhoneMsrWorker
 import com.example.signaldoctor.workers.WifiMsrWorker
@@ -59,7 +59,7 @@ class MsrsWorkManager @Inject constructor(private val workManager: WorkManager) 
 
         val periodicWorkName = msrType.name+ MEASURE_BACKGROUND_NAME_SUFFIX
 
-        val periodicMsrWorkRequest = msrTypeWhen( msrType,
+        val periodicMsrWorkRequest = whenMsrType( msrType,
             phone = PeriodicWorkRequestBuilder<PhoneMsrWorker>(interval),
             sound = PeriodicWorkRequestBuilder<NoiseMsrWorker>(interval),
             wifi = PeriodicWorkRequestBuilder<WifiMsrWorker>(interval)
