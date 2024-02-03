@@ -1,21 +1,16 @@
 package com.example.signaldoctor.services
 
-import android.app.Notification
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
-import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.example.signaldoctor.R
-import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.utils.Loggers
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -33,7 +28,7 @@ abstract class FlowService : Service() {
 
         notificationManager = applicationContext.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
-        Loggers.consoledebug("Background Measurement Service is in onCreate")
+        Loggers.consoleDebug("Background Measurement Service is in onCreate")
 
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

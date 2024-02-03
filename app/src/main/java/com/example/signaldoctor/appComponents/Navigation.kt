@@ -10,21 +10,15 @@ import androidx.compose.animation.core.EaseIn
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.runtime.remember
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navigation
-import com.example.signaldoctor.appComponents.viewModels.SettingsScreenVM
 import com.example.signaldoctor.contracts.DestinationsInfo
 import com.example.signaldoctor.screens.MapScreen
 import com.example.signaldoctor.screens.SettingsScreen
-import com.example.signaldoctor.utils.Loggers.consoledebug
 import dagger.hilt.android.AndroidEntryPoint
-import leakcanary.AppWatcher
 import org.osmdroid.config.Configuration.getInstance
 
 @AndroidEntryPoint
@@ -43,7 +37,7 @@ class MainActivity : ComponentActivity() {
             ){
 
                 navigation(
-                    startDestination = DestinationsInfo.MapScreen.route,
+                    startDestination = "${DestinationsInfo.MapScreen.routePath}?${DestinationsInfo.MapScreen.CENTER_LOCATION_ARGUMENT_NAME}=true",
                     route = DestinationsInfo.DestinationGraphMain.route
                 ){//MapScreen route
 
@@ -89,24 +83,7 @@ class MainActivity : ComponentActivity() {
 
                         SettingsScreen(
                             //settingsScreenVM = hiltViewModel(parent),
-                            onNavigationBack = {
-                                /*
-                                val navDirections = DestinationsInfo.MapScreen.run {
-                                    "$routePath?$CENTER_LOCATION_ARGUMENT_NAME=false"
-                                }
-                                navController.navigate(navDirections){
-                                   popUpTo(DestinationsInfo.MapScreen.run {
-                                       "$routePath?$CENTER_LOCATION_ARGUMENT_NAME=false"
-                                   }){
-                                       saveState = true
-                                       inclusive = true
-                                   }
-                                  restoreState = true
-                                    launchSingleTop = true
-                                } */
-
-                            navController.popBackStack()
-                            }
+                            onNavigationBack = navController::popBackStack
                         )
                     }
 

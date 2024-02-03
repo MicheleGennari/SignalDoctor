@@ -2,6 +2,7 @@ package com.example.signaldoctor.screens
 
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -32,6 +33,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDefaults
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -46,13 +52,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withRunningRecomposer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -68,7 +75,7 @@ import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.services.BackgroundMeasurementsService
 import com.example.signaldoctor.services.DURATION_KEY
 import com.example.signaldoctor.ui.theme.SignalDoctorTheme
-import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.Loggers.consoleDebug
 import com.example.signaldoctor.utils.MSRS_TO_TAKE_MAX
 import com.example.signaldoctor.utils.MSRS_TO_TAKE_MIN
 import com.example.signaldoctor.utils.OptionalSliderDefaults
@@ -78,11 +85,12 @@ import com.example.signaldoctor.utils.toEpochMillis
 import com.example.signaldoctor.utils.toZoneDateTime
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
+import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZonedDateTime
-import java.util.Date
 import kotlin.math.roundToInt
 
 
@@ -94,7 +102,13 @@ fun SettingsScreen(
     onNavigationBack : () -> Unit = {}
 ){
 
+    val app = LocalContext.current.applicationContext
+    val hasDeviceMic = remember{ app.packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE) }
+
+
     val mainActivity = LocalContext.current as MainActivity
+
+
 
     val isUserLocationAvailable by settingsScreenVM.isUserLocationAvailable.collectAsStateWithLifecycle()
 
@@ -114,10 +128,10 @@ fun SettingsScreen(
 
     val locationPermission = rememberLocationPermissionState{ isGranted ->
         if(isGranted) {
-            consoledebug("location permissions granted")
+            consoleDebug("location permissions granted")
             settingsScreenVM.locationUpdatesOn()
         }
-        else consoledebug("locations permissions denied")
+        else consoleDebug("locations permissions denied")
     }
     DisposableEffect(locationPermission.status.isGranted){
         if(locationPermission.status.isGranted)
@@ -135,7 +149,12 @@ fun SettingsScreen(
 
     val currentSettingsList by settingsScreenVM.currentSettingsList.collectAsStateWithLifecycle()
 
+
+
     SignalDoctorTheme{
+
+        val snackbareHostState = remember{SnackbarHostState()}
+        val snackbarLauncher = rememberCoroutineScope()
 
         Scaffold(
             modifier = modifier ,
@@ -147,8 +166,15 @@ fun SettingsScreen(
                     },
                     onNavigationBack = onNavigationBack
                 )
+            },
+            snackbarHost = {
+                SnackbarHost(snackbareHostState) {
+                    Snackbar(snackbarData = it)
+                }
             }
         ) { contentPadding ->
+
+            val deviceHasNoMicSnackbarMessage = stringResource(id = R.string.device_with_no_microphone_snackbar_message)
 
             MeasurementSettingsList(
                 modifier = Modifier
@@ -178,33 +204,28 @@ fun SettingsScreen(
                         msrsToTake = it
                     }
                 },
-                isBackgroundSwitchEnabled = if(currentSettingsList == Measure.sound) canRunNoiseMeasurement else canRunBaseMeasurement
-                /*(if(currentSettingsList == Measure.sound)
-                        runNoiseMeasurementPermission.allPermissionsGranted
-                else
-                    runBaseMeasurementPermission.allPermissionsGranted) && isUserLocationAvailable*/
-               /*(currentSettingsList != Measure.sound || recordPermission.status.isGranted)
-                        && locationPermission.status.isGranted*/,
+                isBackgroundSwitchEnabled = if(currentSettingsList == Measure.sound) canRunNoiseMeasurement && hasDeviceMic
+                        else canRunBaseMeasurement,
                 onIsBackgroundOnChange = {
                             settingsScreenVM.updateMeasureSettings(currentSettingsList) {
                                 isBackgroundMsrOn = it
                             }
-                    /*
-                    if((currentSettingsList != Measure.sound || recordPermission.status.isGranted) && locationPermission.status.isGranted){
-                        viewModel.updateMeasureSettings(currentSettingsList) {
-                            isBackgroundMsrOn = it
-                        }
-                    } else if(!recordPermission.status.isGranted) recordPermission.launchPermissionRequest()
-                    else if(!locationPermission.status.isGranted) locationPermission.
-                            launchPermissionRequest()
-                    */
                 },
                 onIsBackgroundOnChangeWhenDisabled = { _ ->
-                    val neededPermissions = runNoiseMeasurementPermission
-                        .takeIf { currentSettingsList == Measure.sound } ?: runBaseMeasurementPermission
+                    if (!hasDeviceMic) snackbarLauncher.launch{
+                        snackbareHostState.showSnackbar(
+                            message = deviceHasNoMicSnackbarMessage,
+                            withDismissAction = true,
+                            duration = SnackbarDuration.Short
+                        )
+                    }else{
+                        val neededPermissions = runNoiseMeasurementPermission
+                            .takeIf { currentSettingsList == Measure.sound }
+                            ?: runBaseMeasurementPermission
 
-                    neededPermissions.checkPermissions{
-                        settingsScreenVM.checkLocationSettings(mainActivity)
+                        neededPermissions.checkPermissions {
+                            settingsScreenVM.checkLocationSettings(mainActivity)
+                        }
                     }
                 },
                 onPeriodicityChange = {
@@ -214,10 +235,10 @@ fun SettingsScreen(
                 },
                 onFreshnessChange = {
                     settingsScreenVM.updateMeasureSettings(currentSettingsList){
-                        consoledebug("Updating freshness...")
-                        consoledebug("freshness was ${freshness.toZoneDateTime()}")
+                        consoleDebug("Updating freshness...")
+                        consoleDebug("freshness was ${freshness.toZoneDateTime()}")
                         freshness = it
-                        consoledebug("the user selected freshness is ${it.toZoneDateTime()}")
+                        consoleDebug("the user selected freshness is ${it.toZoneDateTime()}")
                     }
                 },
                 onOldnessChange = {
@@ -252,19 +273,19 @@ fun SettingsTopBar(
                                 Icon(
                                     modifier = Modifier.size(25.dp),
                                     painter = painterResource(id = R.drawable.back_button),
-                                    contentDescription = "go to previous screen" )
+                                    contentDescription = stringResource(R.string.settings_screen_navigate_back_button) )
                             }
                             Icon(
                                 modifier = Modifier.size(35.dp),
                                 tint = MaterialTheme.colorScheme.primary,
                                 painter = painterResource(R.drawable.settings_icon),
-                                contentDescription = "Settings Screen Logo"
+                                contentDescription = stringResource(R.string.settings_screen_logo_label)
                             )
                         }
             },
             title = {
                 Text(
-                    text = "Settings",
+                    text = stringResource(R.string.settings_screen_title),
                     style = MaterialTheme.typography.headlineMedium,
                 )
             }
@@ -374,7 +395,7 @@ fun MeasurementSettingsList(
             value = measurementSettings.periodicity,
             checked = measurementSettings.isBackgroundMsrOn && isBackgroundSwitchEnabled,
             onChecked = if(isBackgroundSwitchEnabled) onIsBackgroundOnChange else onIsBackgroundOnChangeWhenDisabled,
-            description = "Background measurement",
+            description = stringResource(R.string.background_measurement_setting_description),
             valueText ="every "+ when (measurementSettings.periodicity) {
                 1 -> " 1 minute"
                 else -> "${measurementSettings.periodicity} minutes "
@@ -393,14 +414,14 @@ fun MeasurementSettingsList(
             valueRange = MSRS_TO_TAKE_MIN.toFloat().rangeTo(MSRS_TO_TAKE_MAX.toFloat()),
             steps = MSRS_TO_TAKE_MAX / MSRS_TO_TAKE_MIN -2,
             onValueChange = onMsrsToTakeChange,
-            description = "Color map upon the most recent measurements",
+            description = stringResource(R.string.msrs_to_take_setting_description),
             valueText = "over the last ${measurementSettings.msrsToTake} measurements"
         )
 
         divider()
         key(msrType.ordinal){
             RangeDatePickerSetting(
-                description = "Select the time range for evaluating averages",
+                description = stringResource(R.string.msrs_average_time_range_setting_description),
                 freshness = measurementSettings.freshness,
                 oldness = measurementSettings.oldness,
                 onFreshnessChange = onFreshnessChange,
@@ -464,8 +485,6 @@ fun OptionalSliderSetting(
     onValueChange : (Int) -> Unit = {},
     optionDescriptionFontSize : TextUnit = 4.em,
 ){
-
-        consoledebug("I'm getting recomposed")
 
         Text(
             fontSize = optionDescriptionFontSize,
@@ -531,7 +550,7 @@ fun RangeDatePickerSetting(
             PickerToggableDialog(
                 modifier = modifier.weight(5 / 10f),
                 date = freshness,
-                title = "from",
+                title = stringResource(R.string.freshness_date_picker_title),
                 onDateChange = onFreshnessChange,
                 dateValidator = {
                     it >= oldness && dateValidator(it)
@@ -541,7 +560,7 @@ fun RangeDatePickerSetting(
             PickerToggableDialog(
                 modifier= modifier.weight(5 / 10f),
                 date = oldness,
-                title = "to",
+                title = stringResource(R.string.oldness_date_picker_dialog),
                 onDateChange = onOldnessChange,
                 dateValidator = {
                     it <= freshness && dateValidator(it)
@@ -611,7 +630,7 @@ fun PickerToggableDialog(
                     headline = { Text(text = title) },
                     showModeToggle = false,
                     dateValidator = { newDate: Long ->
-                        consoledebug("inside date validator")
+                        consoleDebug("inside date validator")
                         onDateChange(newDate)
                         true
                     }
@@ -757,45 +776,6 @@ fun stopBackgroundMeasurement(msrType: Measure) : Boolean {
 
     return LocalContext.current.applicationContext.stopService(intent)
 
-}
-
-fun <T>whenMsrType(
-    currentMsrType : Measure,
-    phone : T,
-    sound : T,
-    wifi : T
-) : T {
-    return when(currentMsrType){
-        Measure.sound -> phone
-        Measure.wifi -> sound
-        Measure.phone -> wifi
-    }
-}
-
-fun msrTypeWhen(
-    currentMsrType: Measure,
-    phone : () -> Unit,
-    sound : () -> Unit,
-    wifi : () -> Unit
-){
-    when(currentMsrType){
-        Measure.phone -> phone()
-        Measure.wifi -> wifi()
-        Measure.sound -> sound()
-    }
-}
-
-suspend fun msrTypeWhenSuspend(
-    currentMsrType: Measure,
-    phone : suspend  () -> Unit,
-    sound : suspend () -> Unit,
-    wifi : suspend () -> Unit
-){
-    when(currentMsrType){
-        Measure.phone -> phone()
-        Measure.wifi -> wifi()
-        Measure.sound -> sound()
-    }
 }
 
 @Composable

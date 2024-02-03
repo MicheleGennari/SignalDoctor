@@ -1,10 +1,13 @@
 package com.example.signaldoctor.screens
 
+import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.Resources.NotFoundException
 import android.location.Location
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -33,7 +36,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text2.input.TextFieldState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DockedSearchBar
@@ -48,6 +50,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDefaults
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarVisuals
@@ -60,9 +64,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableDoubleStateOf
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -72,14 +74,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.DefaultAlpha
-import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextPainter
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -104,11 +104,12 @@ import com.example.signaldoctor.mapUtils.SquaredZonesOverlay2
 import com.example.signaldoctor.mapUtils.rememberMap
 import com.example.signaldoctor.searchBarHint.ISearchBarHint
 import com.example.signaldoctor.ui.theme.SignalDoctorTheme
-import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.Loggers.consoleDebug
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
 import com.google.accompanist.permissions.isGranted
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
@@ -126,8 +127,15 @@ fun MapScreen(
 
     SignalDoctorTheme {
 
-        
+
+
+        val app = LocalContext.current.applicationContext
+
+        val hasDeviceMic = remember{ app.packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE) }
+
         val isInternetAvailable by mapScreenVM.isNetworkAvailable.collectAsStateWithLifecycle()
+
+
 
         val runNoiseMeasurementsPermission = rememberNoiseMeasurementPermissionState()
 
@@ -135,20 +143,24 @@ fun MapScreen(
 
         val sendNotificationsPermission = rememberSendNotificationsPermissionState { isGranted ->
             when(isGranted) {
-                true -> consoledebug(" Notifications Permission GRANTED")
-                false -> consoledebug(" Notifications Permission DENIED")
+                true -> consoleDebug(" Notifications Permission GRANTED")
+                false -> consoleDebug(" Notifications Permission DENIED")
             }
         }
 
         val locationPermission = rememberLocationPermissionState { isGranted ->
             when(isGranted) {
                 true -> {
-                    consoledebug("Location Permission GRANTED")
+                    consoleDebug("Location Permission GRANTED")
                     //mapScreenVM.locationUpdatesOn()
                 }
-                false -> consoledebug("Location Permission DENIED")
+                false -> consoleDebug("Location Permission DENIED")
             }
         }
+
+        val screenLocation by mapScreenVM.mapScreenUiState.screenLocation.collectAsStateWithLifecycle()
+        val userLocation by mapScreenVM.userLocation.collectAsStateWithLifecycle()
+
         DisposableEffect(locationPermission.status.isGranted){
             if(locationPermission.status.isGranted)
                 mapScreenVM.locationUpdatesOn()
@@ -157,10 +169,11 @@ fun MapScreen(
             }
         }
 
+
         val recordPermission = rememberRecordPermissionState { isGranted ->
             when(isGranted) {
-                true -> consoledebug(" Recording Permission GRANTED")
-                false -> consoledebug(" Recording Permission DENIED")
+                true -> consoleDebug(" Recording Permission GRANTED")
+                false -> consoleDebug(" Recording Permission DENIED")
             }
         }
 
@@ -168,10 +181,6 @@ fun MapScreen(
 
         val currentNetworkMode by mapScreenVM.networkMode.collectAsStateWithLifecycle()
         val currentMsrType by mapScreenVM.mapScreenUiState.currentMsrType.collectAsStateWithLifecycle()
-
-
-        val screenLocation by mapScreenVM.mapScreenUiState.screenLocation.collectAsStateWithLifecycle()
-        val userLocation by mapScreenVM.userLocation.collectAsStateWithLifecycle()
 
 
         val arePhoneMsrsDated by mapScreenVM.arePhoneMsrsDated.collectAsStateWithLifecycle()
@@ -187,6 +196,7 @@ fun MapScreen(
         val localSearchHints by mapScreenVM.localSearchBarHints.collectAsStateWithLifecycle()
         val searchHints by mapScreenVM.searchBarHints.collectAsStateWithLifecycle()
         val showHints by mapScreenVM.mapScreenUiState.searchbarShowHints.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+
         val centerOnScreenLocation by mapScreenVM.mapScreenUiState.centerOnScreenLocation.collectAsStateWithLifecycle()
 
         val measurementProgress by  animateFloatAsState(targetValue = mapScreenVM.measurementProgress.collectAsStateWithLifecycle().value,
@@ -212,6 +222,8 @@ fun MapScreen(
                 Column(
                     modifier = Modifier.padding(7.dp)
                 ){
+
+                    val noSearchResultsMessage = stringResource(id = R.string.search_bar_query_no_results_snackbar_message)
 
                     SearchBar(
                         modifier = Modifier
@@ -250,7 +262,7 @@ fun MapScreen(
                                     )
                             } ?: snackbarLauncher.launch {
                                 snackbarHostState.showSnackbar(
-                                    message = "Can't find such location"
+                                    message = (noSearchResultsMessage)
                                 )
                             }
                             mapScreenVM.mapScreenUiState.setShowHints(false)
@@ -305,7 +317,9 @@ fun MapScreen(
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        val mainActivity = LocalContext.current as MainActivity
+                        val mainActivity = LocalContext.current as Activity
+
+                        val noMicSnackbarMessage = stringResource(id = R.string.device_with_no_microphone_snackbar_message)
 
                         UserLocationButton(
                             modifier = Modifier.size(60.dp),
@@ -350,23 +364,25 @@ fun MapScreen(
                             },
                             onClickWhenDisabled = {
 
-                                val neededPermissions = runNoiseMeasurementsPermission.takeIf { currentMsrType == Measure.sound } ?: runBaseMeasurementPermission
-
-                                    neededPermissions.checkPermissions{
-                                        if(userLocation == null)
+                                if(!hasDeviceMic) snackbarLauncher.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = noMicSnackbarMessage,
+                                        withDismissAction = true,
+                                        duration = SnackbarDuration.Short
+                                    )
+                                } else{
+                                    val neededPermissions =
+                                        runNoiseMeasurementsPermission.takeIf { currentMsrType == Measure.sound }
+                                            ?: runBaseMeasurementPermission
+                                    neededPermissions.checkPermissions {
+                                        if (userLocation == null)
                                             mapScreenVM.checkLocationSettings(mainActivity)
                                     }
-
-                              /*
-                                neededPermissions.apply {
-                                    if(!allPermissionsGranted )
-                                        launchMultiplePermissionRequest()
-                                    else if(userLocation == null)
-                                        viewModel.checkLocationSettings(mainActivity)
-                                } */
+                                }
                             },
                             enabled = userLocation != null &&
-                                    if(currentMsrType == Measure.sound) recordPermission.status.isGranted else true,
+                                    if(currentMsrType == Measure.sound) runNoiseMeasurementsPermission.allPermissionsGranted && hasDeviceMic
+                                    else runBaseMeasurementPermission.allPermissionsGranted,
                         )
 
                         SettingsButton(
@@ -389,7 +405,7 @@ fun MapScreen(
                     MsrsBar(
                         currentMsrType = currentMsrType,
                         changeCurrentMsrMode = { newMode ->
-                            mapScreenVM.cancelAllMeasurements()
+                            mapScreenVM.cancelAllOneTimeMeasurements()
                             mapScreenVM.mapScreenUiState.setCurrentMsrMode(newMode)
                         },
                         phoneMsr = lastPhoneMsr,
@@ -401,9 +417,23 @@ fun MapScreen(
             },
             snackbarHost = {
 
-                SnackbarHost(hostState = snackbarHostState) {
-                    Snackbar(snackbarData = it)
+                LaunchedEffect(key1 = isInternetAvailable) {
+                    if (!isInternetAvailable) {
+                        snackbarHostState.showSnackbar(
+                            message = "No internet connection. Switched to offline mode",
+                            withDismissAction = true
+                        )
+                    }
                 }
+
+                SnackbarHost(hostState = snackbarHostState) {
+                    Snackbar(
+                        snackbarData = it,
+                        contentColor = SnackbarDefaults.contentColor
+                    )
+
+                }
+
             }
         )
     }
@@ -447,9 +477,9 @@ fun Map(
     //this saves the current map center and zoom level when composable is disposed. Don't worry about centering to user location:
     // this latter behaviour will be achieved by AndroidView()'s update function using parameters 'centerOnUserLocation' and 'userLocation
     LifecycleStartEffect{
-        consoledebug("on start effect")
+        consoleDebug("on start effect")
         onStopOrDispose {
-            consoledebug("on stop effect")
+            consoleDebug("on stop effect")
             savedCenterLocation = map.mapCenter
             savedZoom = map.zoomLevelDouble
         }
@@ -506,14 +536,19 @@ fun Map(
                         })
                     })
 
-                    for (mode in Measure.values()) add(mode.ordinal, SquaredZonesOverlay2( ctx,
-                        when(mode){
-                            Measure.sound -> soundAvgs
-                            Measure.phone -> phoneAvgs
-                            Measure.wifi -> wifiAvgs
-                        },
-                        mode
-                        ))
+                    for (mode in Measure.values()) {
+                        add(
+                            mode.ordinal, SquaredZonesOverlay2(
+                                ctx,
+                                when (mode) {
+                                    Measure.sound -> soundAvgs
+                                    Measure.phone -> phoneAvgs
+                                    Measure.wifi -> wifiAvgs
+                                },
+                                mode
+                            )
+                        )
+                    }
                 }
 
                 controller.run {
@@ -546,7 +581,7 @@ fun Map(
                             )
                         })
                     } else {
-                        consoledebug("Delete Marker")
+                        consoleDebug("Delete Marker")
                         forEachIndexed { index, overlay ->
                             if (overlay is GpsMarker) removeAt(index)
                         }
@@ -560,14 +595,16 @@ fun Map(
                         }
 
                         //Take all measures overlays and disable them if they're not of the current selected measure type
-                        overlay.isEnabled = if (index == currentMsrMode.ordinal) true else false
+                        overlay.isEnabled = index == currentMsrMode.ordinal
                     }
                 }
 
                 controller.run {
                     if (centerOnUserLocation) {
-                        consoledebug("map will now be centered")
+                        consoleDebug("map will now be centered")
                         screenLocation?.run{
+                            consoleDebug("mapScreen screen location lat now is $latitude")
+                            consoleDebug("mapScreen screen location long now is $longitude")
                             if (zoomLevelDouble < 15.5)
                                 zoomTo(16.8)
 
@@ -585,33 +622,6 @@ fun Map(
     }
 }
 
-/*@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-@Preview(name="searchBarPreview")
-fun SearchBar(
-    modifier: Modifier = Modifier,
-    locationText : TextFieldValue = TextFieldValue("54, 23"),
-    onValueChange : (TextFieldValue) -> Unit = {},
-    buttonEvent : () -> Unit = {}
-){
-        Row() {
-            TextField(value = locationText, onValueChange = onValueChange )
-            Button(
-                shape = CircleShape,
-                modifier = Modifier.wrapContentSize(),
-                onClick = buttonEvent
-            ) {
-                Icon(
-                    modifier= Modifier
-                        .alignByBaseline()
-                        .clip(CircleShape)
-                        .size(20.dp),
-                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                    contentDescription = "set Location"
-                )
-            }
-    }
-}*/
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -632,6 +642,7 @@ fun SearchBar(
     onSearch: (String) -> Unit = {}
 ){
 
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -642,7 +653,7 @@ fun SearchBar(
         DockedSearchBar(
             query = text,
             placeholder = {
-                          Text(text = "Cerca qui", fontWeight = FontWeight.Light)
+                          Text(text = stringResource(id = R.string.search_bar_place_holder ), fontWeight = FontWeight.Light)
             },
             onQueryChange = onQueryChange,
             onSearch = onSearch,
@@ -658,7 +669,7 @@ fun SearchBar(
                         Icon(
                             modifier = modifier.padding(7.dp),
                             painter = painterResource(id = if(showHints) R.drawable.back_button else R.drawable.search_icon2),
-                            contentDescription = "Exit search bar input mode"
+                            contentDescription = stringResource(R.string.search_bar_exit_button_icon_label)
                         )
                     }
                 }
@@ -672,7 +683,7 @@ fun SearchBar(
                                 modifier = Modifier
                                     .padding(13.dp),
                                 painter = painterResource(id = R.drawable.x_icon),
-                                contentDescription = "Search button"
+                                contentDescription = stringResource(R.string.cancel_search_bar_query_button_label)
                             )
                         }
                 }
@@ -699,7 +710,7 @@ fun SearchBar(
                     if (localHints.isEmpty()){
                         ListItem(headlineContent = {
                             Text(
-                                text = "no results found",
+                                text = stringResource(R.string.empy_hint_list_message),
                                 color = MaterialTheme.colorScheme.error
                             )
                         })
@@ -748,25 +759,6 @@ fun SearchBarHints(
             )
         }
 
-       /* for (hint in hints) {
-
-            key(hint.latitude,hint.longitude){
-                ListItem(
-                    modifier = Modifier.clickable {
-                        onClickHint(hint)
-                    },
-                    headlineContent = {
-                        Text(
-                            color = hintsColor,
-                            text = hint.locationName
-                        )
-                    })
-                Divider(
-                    thickness = Dp.Hairline
-                )
-            }
-        }*/
-
     }
     if (hints.isEmpty() && onEmpty != null) onEmpty()
 }
@@ -793,7 +785,7 @@ fun NetworkModeToggleButton(
                 Icon(
                     modifier = Modifier.size(SwitchDefaults.IconSize),
                     painter = painterResource(id = R.drawable.nework_mode),
-                    contentDescription = "Network Mode Switch"
+                    contentDescription = stringResource(R.string.network_mode_switch_label)
                 )
             }
         )
@@ -818,7 +810,7 @@ fun UserLocationButton(
         Icon(
             modifier = modifier.padding(10.dp),
             painter = painterResource(id = R.drawable.location_button),
-            contentDescription = "get location button",
+            contentDescription = stringResource(R.string.user_location_button_label),
         )
     }
 }
@@ -899,7 +891,8 @@ fun MeasuringButton(
                                     MeasuringState.RUNNING -> R.drawable.stop_icon
                                     MeasuringState.BACKGROUND -> R.drawable.stop_icon
                                 }
-                            ), contentDescription = "Measuring Button"
+                            ),
+                            contentDescription = stringResource(R.string.measurement_button_label)
                         )
                     }
                 }
@@ -921,7 +914,7 @@ fun SettingsButton(
         Icon(
             modifier = Modifier.padding(4.dp),
             painter = painterResource(id = R.drawable.settings_icon) ,
-            contentDescription = "Settings Button"
+            contentDescription = stringResource(R.string.settings_button_label)
         )
     }
 }
@@ -949,7 +942,7 @@ fun MsrsBar(
         for(tabMsrType in Measure.values()) {
             MsrTab(
                 modifier = Modifier.padding(top = 10.dp),
-                selected = if (tabMsrType == currentMsrType) true else false,
+                selected = tabMsrType == currentMsrType,
                 msrName = tabMsrType.name,
                 lastMsr = when(tabMsrType) {
                                        Measure.sound -> noiseMsr

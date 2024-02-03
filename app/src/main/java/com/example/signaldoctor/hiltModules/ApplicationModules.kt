@@ -2,6 +2,9 @@ package com.example.signaldoctor.hiltModules
 
 import android.content.Context
 import android.location.Geocoder
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.getSystemService
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
@@ -132,6 +135,11 @@ class ApplicationModules {
     fun provideFusedLocationProviderSettingsClient(@ApplicationContext ctx: Context) : SettingsClient {
         return LocationServices.getSettingsClient(ctx)
     }
+
+    @Singleton
+    @Provides
+    fun provideNotificationManager(@ApplicationContext ctx : Context) : NotificationManagerCompat =
+        NotificationManagerCompat.from(ctx)
 
 }
 

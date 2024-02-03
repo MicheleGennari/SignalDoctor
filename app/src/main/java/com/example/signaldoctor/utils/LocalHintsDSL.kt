@@ -7,16 +7,6 @@ import com.example.signaldoctor.searchBarHint.ISearchBarHint
 
 suspend fun DataStore<LocalHints>.addHint(hint: ISearchBarHint) {
 
-    /*
-localHints.toBuilder().addLocalHints(
-    LocalHint.getDefaultInstance().toBuilder().apply {
-        latitude = hint.latitude
-        longitude = hint.longitude
-        displayName = hint.locationName
-    }.build()
-).build()
-}*/
-
     updateData { localHints ->
 
         localHints.toBuilder().apply {

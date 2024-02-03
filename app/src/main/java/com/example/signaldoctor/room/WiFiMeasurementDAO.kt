@@ -1,34 +1,32 @@
 package com.example.signaldoctor.room
 
 import androidx.room.Dao
-import androidx.room.MapInfo
+import androidx.room.MapColumn
 import androidx.room.Query
-import com.example.signaldoctor.bin.MsrsMapEntry
-import com.example.signaldoctor.contracts.MsrsMap
 import kotlinx.coroutines.flow.Flow
 import java.util.Date
 
 @Dao
-abstract class WiFiMeasurementDAO : BaseMsrsDAO<WiFIMeasurement>() {
+abstract class WiFiMeasurementDAO : RoomMeasurementDAO<WiFIMeasurement>() {
 
     @Query("SELECT * FROM wifi_table WHERE id = :id ORDER BY date DESC")
-    abstract  fun getMeasurementInfo(id : Int) : Flow<WiFIMeasurement>
+    abstract override fun getMeasurementInfo(id : Int) : Flow<WiFIMeasurement>
 
 
-    @Query("SELECT * FROM wifi_table ORDER BY DATE")
-    abstract fun getMsrs() : Flow<List<WiFIMeasurement>>
+    @Query("SELECT uuid,* FROM wifi_table ORDER BY DATE")
+    abstract override fun getMsrs() : Flow<Map<@MapColumn(columnName = "uuid") String, WiFIMeasurement>>
 
     @Query("SELECT COUNT(tile_index) FROM phone_table WHERE :currentTile <= tile_index AND date >= :oldness")
-    abstract fun countMeasures(currentTile : Long, oldness: Date) : Flow<Int>
+    abstract override fun countMeasures(currentTile : Long, oldness: Date) : Flow<Int>
 
     @Query("SELECT MIN(date) FROM wifi_table")
-    abstract fun getOldestDate() : Flow<Date>
+    abstract override fun getOldestDate() : Flow<String>
 
-    @MapInfo(keyColumn = TableColumn.tile_index, valueColumn = TableColumn.value)
-    @Query("SELECT tile_index, AVG(value) AS value FROM sound_table " +
+    @Query("SELECT tile_index, AVG(value) AS value FROM wifi_table " +
             "WHERE date >= :oldness OR :oldness IS NULL AND date <= :freshness OR :freshness IS NULL " +
             "GROUP BY tile_index " +
             "ORDER BY date DESC LIMIT :msrsToTake")
-    abstract  fun getMsrsAvgs(freshness : Date? = null, oldness : Date? = null, msrsToTake : Int? = Int.MAX_VALUE) : Flow<Map<Long,Int>>
+    abstract override fun getMsrsAvgs(freshness : Date?, oldness : Date?, msrsToTake : Int?)
+    : Flow<Map<@MapColumn(TableColumn.tile_index)Long,@MapColumn(TableColumn.value)Int>>
 
 }

@@ -20,7 +20,6 @@ class PermissionsChecker @Inject constructor(
      val locationProvider: FlowLocationProvider
 ) {
 
-
     fun isRecordingGranted() =
         ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 

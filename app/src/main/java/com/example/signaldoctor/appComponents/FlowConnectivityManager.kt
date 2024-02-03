@@ -5,10 +5,9 @@ import android.net.ConnectivityManager.NetworkCallback
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Build
-import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.Loggers.consoleDebug
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.ProducerScope
-import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.conflate
 import javax.inject.Inject
@@ -16,7 +15,7 @@ import javax.inject.Inject
 class FlowConnectivityManager @Inject constructor(private val connectivityManager: ConnectivityManager) {
 
 
-    fun internetAvailabilityUpdates()  = callbackFlow<Boolean> {
+    fun internetAvailabilityUpdates()  = callbackFlow {
 
         val callback = isInternetAvailableCallbackBasedOnApi()
         try{
@@ -41,7 +40,7 @@ class FlowConnectivityManager @Inject constructor(private val connectivityManage
                 }
 
                 override fun onLost(network: Network) {
-                    consoledebug("connection is lost")
+                    consoleDebug("connection is lost")
                     trySend(false)
                 }
 

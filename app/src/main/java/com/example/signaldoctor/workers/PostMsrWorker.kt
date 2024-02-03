@@ -19,7 +19,7 @@ import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.PhoneMeasurement
 import com.example.signaldoctor.room.SoundMeasurement
 import com.example.signaldoctor.room.WiFIMeasurement
-import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.Loggers.consoleDebug
 import com.google.gson.Gson
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -45,7 +45,7 @@ class PostMsrWorker  @AssistedInject constructor(
             Log.e("POST MEASUREMENT WORKER ERROR", "Can't run as foreground service due to restrictions", e)
         }
         setProgress(workDataOf(NoiseMsrWorker.Progress to 9/10f))
-        consoledebug("DEBUGG")
+        consoleDebug("DEBUGG")
         //val msr =  inputData.getInt(MeasurementBase.MSR_KEY, 0)
         val msrType = objFromInputData(MeasurementBase.MSR_TYPE_KEY, Measure::class.java) ?: return Result.failure()
         return if(

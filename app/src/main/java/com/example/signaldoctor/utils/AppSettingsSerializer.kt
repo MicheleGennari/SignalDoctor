@@ -6,7 +6,6 @@ import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.contracts.Measure
-import com.example.signaldoctor.screens.whenMsrType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import java.io.IOException
@@ -17,7 +16,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 const val APP_LAUNCH_LOCATION_LAT = 44.498955
-const val APP_LAUNCH_LOCATION_LON = 11.327591
+const val APP_LAUNCH_LOCATION_LON = 23.327591
 
 class AppSettingsSerializer : Serializer<AppSettings> {
 

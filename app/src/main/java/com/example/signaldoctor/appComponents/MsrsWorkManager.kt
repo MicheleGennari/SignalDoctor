@@ -9,11 +9,16 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.example.signaldoctor.contracts.Measure
-import com.example.signaldoctor.screens.whenMsrType
+import com.example.signaldoctor.utils.whenMsrType
+import com.example.signaldoctor.workers.NewNoiseMsrWorker
+import com.example.signaldoctor.workers.NewPhoneMsrWorker
+import com.example.signaldoctor.workers.NewWifiMsrWorker
 import com.example.signaldoctor.workers.NoiseMsrWorker
 import com.example.signaldoctor.workers.PhoneMsrWorker
 import com.example.signaldoctor.workers.WifiMsrWorker
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import java.time.Duration
 import javax.inject.Inject
@@ -33,9 +38,9 @@ class MsrsWorkManager @Inject constructor(private val workManager: WorkManager) 
     fun runMeasurement(msrType: Measure): Flow<WorkInfo> {
 
         val getMsrWorkRequest = when (msrType) {
-            Measure.sound -> OneTimeWorkRequestBuilder<NoiseMsrWorker>()
-            Measure.wifi -> OneTimeWorkRequestBuilder<WifiMsrWorker>()
-            Measure.phone -> OneTimeWorkRequestBuilder<PhoneMsrWorker>()
+            Measure.sound -> OneTimeWorkRequestBuilder<NewNoiseMsrWorker>()
+            Measure.wifi -> OneTimeWorkRequestBuilder<NewWifiMsrWorker>()
+            Measure.phone -> OneTimeWorkRequestBuilder<NewPhoneMsrWorker>()
         }.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .addTag(MEASURE_WORK_TAG)
             .addTag(MEASURE_ONE_TIME_WORK_TAG)
@@ -52,7 +57,7 @@ class MsrsWorkManager @Inject constructor(private val workManager: WorkManager) 
             getMsrWorkRequest
         ).enqueue()
 
-        return workManager.getWorkInfosForUniqueWorkLiveData(msrType.name).asFlow().map { it.first() }
+        return workManager.getWorkInfosForUniqueWorkLiveData(msrType.name).asFlow().map { it.first() }.flowOn(Dispatchers.Default)
     }
 
     fun runBackgroundMeasurement(msrType: Measure, interval: Duration) : Flow<WorkInfo> {
@@ -60,9 +65,9 @@ class MsrsWorkManager @Inject constructor(private val workManager: WorkManager) 
         val periodicWorkName = msrType.name+ MEASURE_BACKGROUND_NAME_SUFFIX
 
         val periodicMsrWorkRequest = whenMsrType( msrType,
-            phone = PeriodicWorkRequestBuilder<PhoneMsrWorker>(interval),
-            sound = PeriodicWorkRequestBuilder<NoiseMsrWorker>(interval),
-            wifi = PeriodicWorkRequestBuilder<WifiMsrWorker>(interval)
+            phone = PeriodicWorkRequestBuilder<NewPhoneMsrWorker>(interval),
+            sound = PeriodicWorkRequestBuilder<NewNoiseMsrWorker>(interval),
+            wifi = PeriodicWorkRequestBuilder<NewWifiMsrWorker>(interval)
         ).addTag(MEASURE_WORK_TAG)
             .addTag(MEASURE_BACKGROUND_WORK_TAG)
             /*

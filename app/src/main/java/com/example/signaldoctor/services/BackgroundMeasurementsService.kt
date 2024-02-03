@@ -10,20 +10,37 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.TaskStackBuilder
 import androidx.core.net.toUri
 import androidx.datastore.core.DataStore
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleService
+import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.work.WorkInfo
+import androidx.work.hasKeyWithValueOfType
 import com.example.signaldoctor.AppSettings
+import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.R
+import com.example.signaldoctor.appComponents.AppNotificationManager
+import com.example.signaldoctor.appComponents.FlowLocationProvider
 import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.appComponents.MsrsWorkManager
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.DestinationsInfo
 import com.example.signaldoctor.contracts.Measure
-import com.example.signaldoctor.screens.whenMsrType
-import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.whenMsrType
+import com.example.signaldoctor.utils.Loggers.consoleDebug
 import com.example.signaldoctor.utils.getMeasureSettings
+import com.example.signaldoctor.utils.noiseSettings
+import com.example.signaldoctor.utils.phoneSettings
+import com.example.signaldoctor.utils.updateDSL
+import com.example.signaldoctor.utils.wifiSettings
+import com.example.signaldoctor.workers.BaseMsrWorker
+import com.example.signaldoctor.workers.getValue
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -33,6 +50,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.launch
 import java.time.Duration
 import javax.inject.Inject
 
@@ -42,9 +60,10 @@ const val DURATION_KEY = "duration"
 @AndroidEntryPoint
 class BackgroundMeasurementsService: LifecycleService() {
 
-    private lateinit var notificationManager : NotificationManager
+    @Inject lateinit var appNotificationManager: AppNotificationManager
     @Inject lateinit var msrsWorkManager: MsrsWorkManager
     @Inject lateinit var settingsDataStore : DataStore<AppSettings>
+    @Inject lateinit var locationProvider: FlowLocationProvider
 
     companion object {
         const val START_BACKGROUND_ACTION = "RUN_BACKGROUND_ACTION"
@@ -58,15 +77,94 @@ class BackgroundMeasurementsService: LifecycleService() {
 
     private lateinit var appSettings : SharedFlow<AppSettings>
 
-    private fun initializeAppSettings() = settingsDataStore.data.onEach {
-        if(!(it.phoneSettings.isBackgroundMsrOn || it.noiseSettings.isBackgroundMsrOn || it.wifiSettings.isBackgroundMsrOn))
-            stopSelf()
-    }.shareIn(lifecycleScope, SharingStarted.WhileSubscribed())
+    private fun initializeAppSettings() = settingsDataStore.data.shareIn(lifecycleScope, SharingStarted.WhileSubscribed())
 
 
-    private val phoneJob = Job()
-    private val noiseJob = Job()
-    private val wifiJob = Job()
+    private val phoneJob = Job().apply { complete() }
+    private val noiseJob = Job().apply { complete() }
+    private val wifiJob = Job().apply{ complete() }
+
+
+    override fun onCreate(){
+        super.onCreate()
+
+        consoleDebug("Background Measurement Service is in onCreate")
+
+        promoteAsForegroundService()
+
+
+        appSettings = initializeAppSettings()
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED){
+                appSettings.collect{
+                    if(!(it.phoneSettings.isBackgroundMsrOn || it.noiseSettings.isBackgroundMsrOn || it.wifiSettings.isBackgroundMsrOn))
+                        stopSelf()
+                }
+            }
+        }
+
+
+        lifecycleScope.launch{
+            lifecycle.repeatOnLifecycle(state = Lifecycle.State.STARTED) {
+                locationProvider.requestLocationUpdates(FlowLocationProvider.defaultLocationUpdateSettings).collect{ userLocation ->
+                    if(userLocation == null) {
+                        settingsDataStore.updateDSL {
+                            phoneSettings { isBackgroundMsrOn = false }
+                            noiseSettings { isBackgroundMsrOn = false }
+                            wifiSettings { isBackgroundMsrOn = false }
+                        }
+                        stopSelf()
+                    }
+                }
+            }
+        }
+
+    }
+
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+
+
+        when (intent?.action) {
+
+            START_PHONE_ACTION -> if(!phoneJob.isActive) backgroundMsrTypeManager(Measure.phone)
+
+
+            START_NOISE_ACTION -> if(!noiseJob.isActive)  backgroundMsrTypeManager(Measure.sound)
+
+            START_WIFI_ACTION -> if(!wifiJob.isActive)  backgroundMsrTypeManager(Measure.wifi)
+
+            STOP_BACKGROUND_ACTION -> stopSelf(startId)
+        }
+
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+
+    private fun promoteAsForegroundService() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                BACKGROUND_SERVICE_NOTIFICATION,
+                foregroundNotification(),
+                if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0 + ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            )
+        } else startForeground(BACKGROUND_SERVICE_NOTIFICATION, foregroundNotification())
+    }
+
+    private fun foregroundNotification(optionalActions : List<NotificationCompat.Action> = emptyList() ) =
+        NotificationCompat.Builder(this, MEASUREMENT_NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.termometer_icon)
+            .setContentTitle("Background Measurements On")
+            .setContentText("touch here to manage background measurements")
+            .setShowWhen(false)
+            .setOngoing(true)
+            .setContentIntent(launchSettingsScreenPendingIntent())
+            .apply {
+                for (action in optionalActions){
+                    addAction(action)
+                }
+            }.build()
 
     private fun launchSettingsScreenAction() : NotificationCompat.Action {
         val intent = Intent(
@@ -142,26 +240,10 @@ class BackgroundMeasurementsService: LifecycleService() {
         ).build()
     }
 
-    private fun foregroundNotification(optionalActions : List<NotificationCompat.Action> = emptyList() ) =
-        NotificationCompat.Builder(this, MEASUREMENT_NOTIFICATION_CHANNEL_ID)
-        .setSmallIcon(R.drawable.termometer_icon)
-        .setContentTitle("Background Measurements On")
-        .setContentText("touch here to manage background measurements")
-            .setShowWhen(false)
-            .setContentIntent(launchSettingsScreenPendingIntent())
-        .apply {
-            for (action in optionalActions){
-                addAction(action)
-            }
-        }.build()
-
-
-
-
 
     private fun updateForegroundNotification(appSettings: AppSettings){
 
-        notificationManager.notify(
+        appNotificationManager.notify(
             BACKGROUND_SERVICE_NOTIFICATION,
             foregroundNotification(
             optionalActions = listOfNotNull(
@@ -177,59 +259,6 @@ class BackgroundMeasurementsService: LifecycleService() {
 
     }
 
-    override fun onCreate(){
-        super.onCreate()
-
-
-        notificationManager = applicationContext.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-
-        consoledebug("Background Measurement Service is in onCreate")
-
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                BACKGROUND_SERVICE_NOTIFICATION,
-                foregroundNotification(),
-                if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0 or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            )
-        } else startForeground(BACKGROUND_SERVICE_NOTIFICATION, foregroundNotification())
-
-        appSettings = initializeAppSettings()
-    }
-
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-
-        phoneJob.isActive
-
-        when (intent?.action) {
-
-            START_PHONE_ACTION -> backgroundMsrTypeManager(Measure.phone)
-
-            START_NOISE_ACTION -> backgroundMsrTypeManager(Measure.sound)
-
-            START_WIFI_ACTION -> backgroundMsrTypeManager(Measure.wifi)
-
-            STOP_BACKGROUND_ACTION -> stopSelf(startId)
-        }
-
-        return super.onStartCommand(intent, flags, startId)
-    }
-
-
-    private fun startBackgroundManager(msrType : Measure, startId: Int) : Job {
-        val thisMsrJob =whenMsrType(msrType,
-            phone = phoneJob,
-            sound = noiseJob,
-            wifi = wifiJob
-            )
-
-        return if(thisMsrJob?.isActive != true)
-            backgroundMsrTypeManager(msrType)
-        else
-            thisMsrJob
-
-    }
 
     private fun backgroundMsrTypeManager(msrType : Measure) = combine(
         appSettings.map { appSettings ->
@@ -242,16 +271,17 @@ class BackgroundMeasurementsService: LifecycleService() {
 
         Log.d("service measurement manager", "$msrType background measurement flow is running")
 
-        if(!isBackgroundMsrOn)
+        if(!isBackgroundMsrOn) {
             msrsWorkManager.cancelBackgroundMeasurement(msrType)
+            currentCoroutineContext().cancel()
+        }
         else
             msrsWorkManager.runBackgroundMeasurement(
                 msrType = msrType,
                 interval = Duration.ofMinutes(periodicity.toLong())
-            )
-
+            ).launchIn(lifecycleScope)
     }.onCompletion {
-        consoledebug("service $msrType flow completed")
+        consoleDebug("service $msrType flow completed")
     }.launchIn(lifecycleScope)
     //END OF backgroundMeasurementsManager()
 
@@ -259,38 +289,15 @@ class BackgroundMeasurementsService: LifecycleService() {
 
 
 
-/*
-    private fun runBackgroundMeasurement(intent: Intent) {
+suspend fun manageBackgorundMeasurements(msrSettings: Flow<MeasurementSettings>){
 
-        msrsWorkManager.runBackgroundMeasurmeent(
-            msrType = readMsrTypeFromIntentExtras(intent.extras) ?: return,
-            interval = readDurationMinutesFromIntentExtras(intent.extras) ?: return
-        )
+    val isBackgroundOn = combine(msrSettings.map { it.isBackgroundMsrOn }, ){
+
     }
 
+}
 
-    private fun cancelBackgroundMeasurement(intent : Intent){
-        msrsWorkManager.cancelBackgroundMeasurement(readMsrTypeFromIntentExtras(intent.extras) ?: return)
-    }
 
-    private fun readMsrTypeFromIntentExtras(extras : Bundle?) : Measure? {
 
-        if(extras == null) return null
-
-        return when (extras.getInt(MeasurementBase.MSR_TYPE_KEY, Int.MIN_VALUE)) {
-            Measure.sound.ordinal -> Measure.sound
-            Measure.wifi.ordinal -> Measure.wifi
-            Measure.phone.ordinal -> Measure.phone
-            else -> null
-        }
-    }
-
-    private fun readDurationMinutesFromIntentExtras(extras : Bundle?) : Duration? {
-
-        if(extras == null) return null
-
-        return Duration.ofMinutes(extras.getLong( DURATION_KEY, 0L).takeUnless { it < 15L } ?: return null)
-    }
-*/
 
 

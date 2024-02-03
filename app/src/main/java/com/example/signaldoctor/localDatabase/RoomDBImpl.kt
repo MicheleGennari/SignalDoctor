@@ -7,64 +7,65 @@ import com.example.signaldoctor.contracts.MsrsMap
 import com.example.signaldoctor.room.MsrsDB
 import com.example.signaldoctor.mapUtils.CoordConversions.tileIndexFromLocation
 import com.example.signaldoctor.room.PhoneMeasurement
+import com.example.signaldoctor.room.PhoneMeasurementDAO
+import com.example.signaldoctor.room.RoomMeasurementDAO
 import com.example.signaldoctor.room.RoomMeasurementEntity
 import com.example.signaldoctor.room.SoundMeasurement
 import com.example.signaldoctor.room.WiFIMeasurement
-import com.example.signaldoctor.screens.whenMsrType
-import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.whenMsrType
+import com.example.signaldoctor.utils.Loggers.consoleDebug
+import com.google.firebase.database.GenericTypeIndicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import org.osmdroid.views.MapView
+import java.text.SimpleDateFormat
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class RoomDBImpl @Inject constructor(
-     private val msrsDB : MsrsDB
+    private val msrsDB : MsrsDB
 ) : IMsrsLocalDB {
 
 
      override fun avgsMap(msrType: Measure, settings: MeasurementSettings) : Flow<MsrsMap> {
-
         return when(msrType){
-            Measure.wifi-> msrsDB.wifiMeasurementDAO().getMsrsAvgs().map { it.toMap(MsrsMap()) }
-            Measure.sound-> msrsDB.soundMeasurementDAO().getMsrsAvgs().map { it.toMap(MsrsMap()) }
-            Measure.phone-> msrsDB.phoneMeasurementDAO().getMsrsAvgs().map { it.toMap(MsrsMap()) }
-        }
+            Measure.wifi-> msrsDB.wifiMeasurementDAO().getMsrsAvgs()
+            Measure.sound-> msrsDB.soundMeasurementDAO().getMsrsAvgs()
+            Measure.phone-> msrsDB.phoneMeasurementDAO().getMsrsAvgs()
+        }.flowOn(Dispatchers.IO).map { it.toMap(MsrsMap()) }
 
     }
 
-    override fun getPhoneMsrs(settings: MeasurementSettings): Flow<List<PhoneMeasurement?>> {
-        return msrsDB.phoneMeasurementDAO().getMsrs().flowOn(Dispatchers.IO)
-    }
+    override fun getPhoneMsrs(settings: MeasurementSettings): Flow<Map<String,PhoneMeasurement>> =
+        msrsDB.phoneMeasurementDAO().getMsrs().flowOn(Dispatchers.IO)
 
-    override fun getSoundMsrs(settings: MeasurementSettings): Flow<List<SoundMeasurement?>> {
-        return msrsDB.soundMeasurementDAO().getMsrs().flowOn(Dispatchers.IO)
-    }
+    override fun getSoundMsrs(settings: MeasurementSettings): Flow<Map<String,SoundMeasurement>> =
+        msrsDB.soundMeasurementDAO().getMsrs().flowOn(Dispatchers.IO)
 
-    override fun getWifiMsrs(settings: MeasurementSettings): Flow<List<WiFIMeasurement?>> {
-        return msrsDB.wifiMeasurementDAO().getMsrs().flowOn(Dispatchers.IO)
-    }
+    override fun getWifiMsrs(settings: MeasurementSettings): Flow<Map<String,WiFIMeasurement>> =
+        msrsDB.wifiMeasurementDAO().getMsrs().flowOn(Dispatchers.IO)
 
-    override fun postPhoneMsr(phoneMeasurement: PhoneMeasurement): Boolean {
+    override suspend fun postPhoneMsr(phoneMeasurement: PhoneMeasurement): Boolean {
         msrsDB.phoneMeasurementDAO().postMsr(phoneMeasurement)
         return true
     }
 
-    override fun postSoundMsr(soundMeasurement: SoundMeasurement) : Boolean{
+    override suspend fun postSoundMsr(soundMeasurement: SoundMeasurement) : Boolean{
         msrsDB.soundMeasurementDAO().postMsr(soundMeasurement)
         return true
     }
 
-    override fun postWifiMsr(wifiMeasurement: WiFIMeasurement) : Boolean {
+    override suspend fun postWifiMsr(wifiMeasurement: WiFIMeasurement) : Boolean {
         msrsDB.wifiMeasurementDAO().postMsr(wifiMeasurement)
         return true
     }
 
-    override fun countMeasurements(msrType: Measure, userLocation : Location, limitDate : Date) : Flow<Boolean> {
+    override fun areMsrsDated(msrType: Measure, userLocation : Location, limitDate : Date) : Flow<Boolean> {
 
         val currentTileIndex = MapView.getTileSystem().tileIndexFromLocation(userLocation)
 
@@ -72,7 +73,7 @@ class RoomDBImpl @Inject constructor(
             Measure.phone -> msrsDB.phoneMeasurementDAO().countMeasures(currentTileIndex, limitDate)
             Measure.wifi -> msrsDB.wifiMeasurementDAO().countMeasures(currentTileIndex,limitDate)
             Measure.sound -> msrsDB.soundMeasurementDAO().countMeasures(currentTileIndex, limitDate)
-        }.map { count ->
+        }.flowOn(Dispatchers.IO).map { count ->
             count <1
         }
     }
@@ -83,7 +84,7 @@ class RoomDBImpl @Inject constructor(
             phone = phoneMeasurementDAO().getOldestDate(),
             sound = soundMeasurementDAO().getOldestDate(),
             wifi = wifiMeasurementDAO().getOldestDate()
-            )
+            ).flowOn(Dispatchers.IO).map { SimpleDateFormat.getDateTimeInstance().parse(it) }
     }
 
 
@@ -93,7 +94,8 @@ class RoomDBImpl @Inject constructor(
 
     override fun clearAllTables() {
         msrsDB.clearAllTables()
-        consoledebug("Database rows cancelled")
+        consoleDebug("Database rows cancelled")
     }
+
 
 }

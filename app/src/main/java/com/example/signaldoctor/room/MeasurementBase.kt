@@ -1,13 +1,15 @@
 package com.example.signaldoctor.room
 
 import androidx.room.ColumnInfo
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.UUID
 
 data class MeasurementBase(
     @ColumnInfo(name= TableColumn.tile_index) val tileIndex : Long = 0,
-    @ColumnInfo(name= TableColumn.uuid) val uuid : Long =  System.currentTimeMillis(),
+    @ColumnInfo(name= TableColumn.uuid) val uuid : String =  UUID.randomUUID().toString(),
     @ColumnInfo(name= TableColumn.value) var value : Int = 0,
-    @ColumnInfo(name= TableColumn.date)val date : Date = Date(),
+    @ColumnInfo(name= TableColumn.date)val date : String = SimpleDateFormat.getDateTimeInstance().format(Date()),
 ){
 
     companion object {

@@ -2,7 +2,7 @@ package com.example.signaldoctor.mapUtils
 
 import android.location.Address
 import android.location.Location
-import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.Loggers.consoleDebug
 import dagger.hilt.android.scopes.ActivityRetainedScoped
 import org.osmdroid.bonuspack.location.GeocoderNominatim
 import java.io.IOException
@@ -14,12 +14,12 @@ class FlowOsmGeocoder @Inject constructor(
 ) : IFlowGeocoder {
     override suspend fun getAddressesFromLocationName(locationName: String) : List<Address> =
         try {
-            consoledebug("searching by location name")
+            consoleDebug("searching by location name")
             geocoder.getFromLocationName(
                 locationName,
                 10
             ).also {
-                consoledebug("first address is ")
+                consoleDebug("first address is ")
             }
         }catch (e : IOException){
             e.printStackTrace()
@@ -28,7 +28,7 @@ class FlowOsmGeocoder @Inject constructor(
 
     override suspend fun getAddressesFromLocation(location: Location) : List<Address> =
         try {
-            consoledebug("searching by coordinates")
+            consoleDebug("searching by coordinates")
             geocoder.getFromLocation(
                 location.latitude,
                 location.longitude,

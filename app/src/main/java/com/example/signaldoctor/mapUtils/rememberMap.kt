@@ -2,22 +2,13 @@ package com.example.signaldoctor.mapUtils
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.Saver
-import androidx.compose.runtime.saveable.mapSaver
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import org.osmdroid.views.MapView
 import com.example.signaldoctor.R
-import com.example.signaldoctor.utils.Loggers.consoledebug
-import org.osmdroid.util.GeoPoint
-import javax.inject.Inject
 
 
 @Composable

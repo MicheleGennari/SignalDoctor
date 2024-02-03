@@ -13,4 +13,22 @@
     <string name="wifi_measurement_notification_content_title">Measuring Wifi signal strength…</string>
     <string name="post_measurement_content_title">Uploading Measurement…</string>
     <string name="tile_index_column">tile_index</string>
+    <string name="search_bar_query_no_results_snackbar_message">Can\'t find such location</string>
+    <string name="device_with_no_microphone_snackbar_message">Device doesn\'t have a microphone to run noise measurements</string>
+    <string name="search_bar_place_holder">Search for location</string>
+    <string name="search_bar_exit_button_icon_label">Exit search bar input mode</string>
+    <string name="cancel_search_bar_query_button_label">cancel search bar query button</string>
+    <string name="empy_hint_list_message">no results found</string>
+    <string name="network_mode_switch_label">Network Mode Switch</string>
+    <string name="user_location_button_label">go_to_user_location_button</string>
+    <string name="measurement_button_label">Start measurement button</string>
+    <string name="settings_button_label">navigate to settings screen button</string>
+    <string name="settings_screen_navigate_back_button">navigate back to previous screen</string>
+    <string name="settings_screen_logo_label">Settings screen logo</string>
+    <string name="settings_screen_title">Settings</string>
+    <string name="background_measurement_setting_description">Background measurement</string>
+    <string name="msrs_to_take_setting_description">Color map upon the most recent measurements</string>
+    <string name="msrs_average_time_range_setting_description">Select the time range for evaluating averages</string>
+    <string name="freshness_date_picker_title">ending date</string>
+    <string name="oldness_date_picker_dialog">starting date</string>
 </resources>

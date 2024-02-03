@@ -6,14 +6,19 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
+
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
 
     <application
         android:allowBackup="true"
@@ -45,10 +50,13 @@
         </activity>
 
         <service android:name=".services.BackgroundMeasurementsService"
-            android:foregroundServiceType="microphone|location"/>
+            android:foregroundServiceType="location|microphone"/>
+
+        <service android:name=".services.NewBackgroundMeasurementService"
+            android:foregroundServiceType="location|microphone"/>
 
         <service android:name="androidx.work.impl.foreground.SystemForegroundService"
-            android:foregroundServiceType="microphone|shortService"
+            android:foregroundServiceType="shortService|microphone|location"
             tools:node="merge"/>
 
         <receiver android:name=".broadcastReceivers.RunMeasurementReceiver"

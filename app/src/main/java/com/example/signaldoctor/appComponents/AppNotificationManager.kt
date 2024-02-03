@@ -1,6 +1,7 @@
-package com.example.signaldoctor.utils
+package com.example.signaldoctor.appComponents
 
 import android.Manifest
+import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -17,12 +18,14 @@ import com.example.signaldoctor.broadcastReceivers.RunMeasurementReceiver
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.screens.launchToast
+import com.example.signaldoctor.utils.getMsrTypeSmallIcon
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.scopes.ViewModelScoped
 import javax.inject.Inject
+import javax.inject.Singleton
 
-@ViewModelScoped
+@Singleton
 class AppNotificationManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val notificationManager: NotificationManagerCompat,
@@ -36,6 +39,18 @@ class AppNotificationManager @Inject constructor(
             channelNameResourceId = R.string.measurements_channel_name,
             channelDescriptionResourceId = R.string.measurement_channel_description
         )
+    }
+
+    fun notify(id : Int, notification : Notification) {
+        if (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+
+            return
+        }
+        notificationManager.notify(id, notification)
     }
 
     private fun createMeasurementsChannel(
@@ -92,6 +107,47 @@ class AppNotificationManager @Inject constructor(
                     pendingIntent
                 )
                 .build()
+        )
+    }
+
+    fun sendMeasurementResultNotification(msrType: Measure, result : Int){
+
+        if(result == Int.MAX_VALUE) return
+
+        if (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        notificationManager.notify(
+            msrType.ordinal,
+            NotificationCompat.Builder(context, MEASUREMENT_NOTIFICATION_CHANNEL_ID)
+                .setSmallIcon(getMsrTypeSmallIcon(msrType))
+                .setContentTitle("$msrType background measurement")
+                .setContentText("result is $result dBm")
+                .build()
+
+        )
+    }
+
+    fun sendMeasurementErrorNotification(msrType : Measure, message : String) {
+        if (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        notificationManager.notify(
+            msrType.ordinal,
+            NotificationCompat.Builder(context, MEASUREMENT_NOTIFICATION_CHANNEL_ID)
+                .setSmallIcon(getMsrTypeSmallIcon(msrType))
+                .setContentTitle("$msrType measurement error")
+                .setContentText(message)
+                .build()
+
         )
     }
 

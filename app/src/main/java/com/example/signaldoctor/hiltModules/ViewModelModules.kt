@@ -103,10 +103,4 @@ class ViewModelProvideModules {
 */
 
 
-
-    @ViewModelScoped
-    @Provides
-    fun provideNotificationManager(@ApplicationContext ctx : Context) : NotificationManagerCompat =
-        NotificationManagerCompat.from(ctx)
-
 }

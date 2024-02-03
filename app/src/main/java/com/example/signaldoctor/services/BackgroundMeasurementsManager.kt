@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import com.example.signaldoctor.contracts.Measure
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -18,8 +19,32 @@ class BackgroundMeasurementsManager @Inject constructor(
             Intent(app, BackgroundMeasurementsService::class.java).setAction(action)
         )
 
-    fun stop(){
+    fun start( msrType : Measure, periodicity : Int){
+        sendStartCommand(
+            Intent(app, NewBackgroundMeasurementService::class.java)
+                .setAction(NewBackgroundMeasurementService.START_BACKGROUND_ACTION)
+                .putExtra(NewBackgroundMeasurementService.EXTRA_MSR_TYPE, msrType.ordinal)
+                .putExtra(NewBackgroundMeasurementService.EXTRA_PERIODICITY, periodicity)
+        )
+    }
 
+    fun stop(msrType: Measure){
+        sendStartCommand(
+            Intent(app, NewBackgroundMeasurementService::class.java)
+                .setAction(NewBackgroundMeasurementService.STOP_BACKGROUND_ACTION)
+                .putExtra(NewBackgroundMeasurementService.EXTRA_MSR_TYPE, msrType.ordinal)
+        )
+    }
+
+    fun start(){
+        sendStartCommand(Intent(app, NewBackgroundMeasurementService::class.java))
+    }
+
+    fun stop(){
+        sendStartCommand(
+            Intent(app, NewBackgroundMeasurementService::class.java)
+                .setAction(NewBackgroundMeasurementService.STOP_BACKGROUND_ACTION)
+        )
     }
 
     fun forceStop(){

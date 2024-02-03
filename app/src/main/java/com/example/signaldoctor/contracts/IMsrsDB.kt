@@ -9,6 +9,7 @@ import com.example.signaldoctor.room.RoomMeasurementEntity
 import com.example.signaldoctor.room.SoundMeasurement
 import com.example.signaldoctor.room.WiFIMeasurement
 import com.example.signaldoctor.workers.MsrWorkersInputData
+import com.example.signaldoctor.workers.WifiMsrWorker
 import kotlinx.coroutines.flow.Flow
 import java.util.Date
 
@@ -16,19 +17,19 @@ interface IMsrsDB {
 
     fun avgsMap(msrType : Measure, settings : MeasurementSettings) : Flow<MsrsMap>
 
-    fun getPhoneMsrs(settings: MeasurementSettings) : Flow<List<PhoneMeasurement?>>
+    fun getPhoneMsrs(settings: MeasurementSettings) : Flow<Map<String, PhoneMeasurement>>
 
-    fun getSoundMsrs(settings: MeasurementSettings) : Flow<List<SoundMeasurement?>>
+    fun getSoundMsrs(settings: MeasurementSettings) : Flow<Map<String,SoundMeasurement>>
 
-    fun getWifiMsrs(settings: MeasurementSettings) : Flow<List<WiFIMeasurement?>>
+    fun getWifiMsrs(settings: MeasurementSettings) : Flow<Map<String,WiFIMeasurement>>
 
     fun getOldestDate(msrType: Measure) : Flow<Date>
 
-    fun countMeasurements(msrType: Measure, userLocation : Location, limitDate : Date) : Flow<Boolean>
+    fun areMsrsDated(msrType: Measure, userLocation : Location, limitDate : Date) : Flow<Boolean>
 
-    fun postPhoneMsr(phoneMeasurement: PhoneMeasurement) : Boolean
-     fun postSoundMsr(soundMeasurement: SoundMeasurement) : Boolean
+    suspend fun postPhoneMsr(phoneMeasurement: PhoneMeasurement) : Boolean
+    suspend fun postSoundMsr(soundMeasurement: SoundMeasurement) : Boolean
 
-    fun postWifiMsr(wifiMeasurement: WiFIMeasurement) : Boolean
+    suspend fun postWifiMsr(wifiMeasurement: WiFIMeasurement) : Boolean
 
 }

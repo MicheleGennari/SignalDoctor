@@ -4,11 +4,14 @@ import android.util.Log
 import androidx.datastore.core.DataStore
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.MeasurementSettings
-import com.example.signaldoctor.utils.Loggers.consoledebug
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-import java.io.IOException
-import java.util.Date
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.flow.stateIn
 
 
 suspend fun DataStore<AppSettings>.updateDSL( updater : suspend AppSettings.Builder.() -> Unit){
@@ -53,37 +56,19 @@ suspend fun AppSettings.Builder.wifiSettings(
     }.build()
 }
 
-/*
-suspend fun DataStore<AppSettings>.updateOnly(
-    newNetworkMode: NetworkMode?,
-    newLastLocationLat : Double?,
-    newLastLocationLon : Double?,
-    updatePhoneSettings : MeasurementSettings.() -> MeasurementSettings,
-    updateNoiseSettings : MeasurementSettings.() -> MeasurementSettings,
-    updateWifiSettings: MeasurementSettings.() -> MeasurementSettings
-) {
+fun DataStore<AppSettings>.asSharedFlow(scope : CoroutineScope, sharingMode : SharingStarted = SharingStarted.WhileSubscribed()) =
+    data.shareIn(scope, sharingMode)
 
-    updateData { oldSettingsSnap ->
-        oldSettingsSnap.toBuilder().apply {
-            networkMode = newNetworkMode ?: oldSettingsSnap.networkMode
-            lastLocationLat = newLastLocationLat ?: oldSettingsSnap.lastLocationLat
-            lastLocationLon = newLastLocationLon ?: oldSettingsSnap.lastLocationLon
+fun <T> Flow<AppSettings>.settingAsStateFlow(
+    scope : CoroutineScope,
+    sharingMode : SharingStarted = SharingStarted.WhileSubscribed(),
+    initialValue : T,
+    operators : Flow<T>.() -> Flow<T> = {this},
+    getter : AppSettings.() -> T
+) =
+    map { it.getter() }.operators().stateIn(scope, sharingMode, initialValue = initialValue)
 
-            phoneSettings =  oldSettingsSnap.phoneSettings.updatePhoneSettings()
-            noiseSettings = oldSettingsSnap.noiseSettings.updateNoiseSettings()
-            wifiSettings = oldSettingsSnap.wifiSettings.updateWifiSettings()
+fun <T> Flow<AppSettings>.settingsAsFlow(getter : AppSettings.() -> T) = map { it.getter() }.conflate().distinctUntilChanged()
 
-        }.build()
-    }
-}
-
-fun MeasurementSettings.updateOnly : MeasurementSettings(
-     Periodicity : Int?,
-     msrsToTake : Int?,
-     freshness : Long?,
-     oldness : Long?,
-){
-
-}
-
-*/
+fun <T> Flow<AppSettings>.settingsAsSharedFlow(scope: CoroutineScope, sharingMode: SharingStarted = SharingStarted.WhileSubscribed(), getter : AppSettings.() -> T) =
+    map { it.getter() }.shareIn(scope, sharingMode)

@@ -29,7 +29,7 @@ import com.example.signaldoctor.realtimeFirebase.SoundMeasurementFirebase
 import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.SoundMeasurement
-import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.Loggers.consoleDebug
 import com.google.android.gms.location.Priority
 import com.google.gson.Gson
 import dagger.assisted.Assisted
@@ -81,7 +81,7 @@ class NoiseMsrWorker @AssistedInject constructor(
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
 
-        val notificationWorker = NotificationCompat.Builder(applicationContext, MEASUREMENT_NOTIFICATION_CHANNEL_ID).apply {
+        val workerNotification = NotificationCompat.Builder(applicationContext, MEASUREMENT_NOTIFICATION_CHANNEL_ID).apply {
             setContentTitle(applicationContext.getString(R.string.noise_measurement_notification_content_title))
             setSmallIcon(R.drawable.ear_icon_notification_bitmap)
             setProgress(0, 0, true)
@@ -93,11 +93,11 @@ class NoiseMsrWorker @AssistedInject constructor(
 
         return if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ForegroundInfo(
             Measure.sound.ordinal,
-            notificationWorker,
+            workerNotification,
             ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE + ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION + ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         ) else ForegroundInfo(
             Measure.sound.ordinal,
-            notificationWorker,
+            workerNotification,
         )
     }
 
@@ -110,8 +110,8 @@ class NoiseMsrWorker @AssistedInject constructor(
                 Manifest.permission.RECORD_AUDIO
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            consoledebug("Record permission not granted")
-            ListenableWorker.Result.failure()
+            consoleDebug("Record permission not granted")
+            Result.failure()
         } else try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
 
@@ -134,16 +134,19 @@ class NoiseMsrWorker @AssistedInject constructor(
 
 
                 micRecorder.start()
-                delay(RECORDING_TIME)
-                //Thread.sleep(RECORDING_TIME)
+                repeat(5){ i ->
+                    delay(RECORDING_TIME / 5)
+                    setProgress(workDataOf(Progress to i/10f))
+                }
                 micRecorder.release()
 
-                setProgress(workDataOf(Progress to 2/10f))
+                setProgress(workDataOf(Progress to 6/10f))
 
                 val ffmpegSession = FFmpegKit.execute(
-                    "-nostats -i ${filePath} -af ebur128=framelog=verbose -f null -"
+                    "-nostats -i $filePath -af ebur128=framelog=verbose -f null -"
                 )
-                setProgress(workDataOf(Progress to 5/10f))
+
+                setProgress(workDataOf(Progress to 7/10f))
 
                 if (ReturnCode.isSuccess(ffmpegSession.returnCode)) {
 
@@ -151,25 +154,25 @@ class NoiseMsrWorker @AssistedInject constructor(
                     val matcher = Pattern.compile("I:\\s+(-?\\d+(.\\d+)?)").matcher(msrLog)
                     return if (matcher.find()) {
                         matcher.group(1)?.toDoubleOrNull()?.toInt()?.let { msr ->
-                            consoledebug("noise msr = $msr")
+                            consoleDebug("noise msr = $msr")
                             setProgress(workDataOf(Progress to 8/10f))
 
                             if(
                                 msrsRepo.postSoundMsr(
                                     SoundMeasurement(
-                                        firebaseTable = SoundMeasurementFirebase(
                                             baseInfo = MeasurementBase(
                                                 tileIndex = flowLocationProvider.tileIndexFromLocation(Priority.PRIORITY_HIGH_ACCURACY) ?: return Result.retry(),
                                                 value = msr
                                             )
-                                        )
                                     ),
                                     appSettings.data.first().networkMode
                                 )
-                            )
-                                Result.success(gson.workDataOfMsrWorkerResult(msr, Measure.sound))
+                            ) {
+                                setProgress(workDataOf(Progress to 1f))
+                                Result.success(workDataOf(MeasurementBase.MSR_KEY to msr))
+                            }
                             else
-                                Result.failure(gson.workDataOfMsrWorkerResult(msr, Measure.sound))
+                                Result.failure(workDataOf(MeasurementBase.MSR_KEY to msr))
 
                         } ?: Result.failure()
                     } else Result.failure()
@@ -180,8 +183,8 @@ class NoiseMsrWorker @AssistedInject constructor(
 
 
         } catch (e: IOException) {
-            Log.e("MEDIA RECORDER ERROR", "prepare() throwed IO Exception")
-            ListenableWorker.Result.failure()
+            Log.e("MEDIA RECORDER ERROR", "prepare() throwed IO Exception", e)
+            Result.failure()
         }
 
 

@@ -10,7 +10,6 @@ import androidx.core.app.NotificationCompat
 import androidx.datastore.core.DataStore
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
-import androidx.work.Data
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
@@ -24,7 +23,7 @@ import com.example.signaldoctor.realtimeFirebase.PhoneMeasurementFirebase
 import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.PhoneMeasurement
-import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.Loggers.consoleDebug
 import com.google.android.gms.location.Priority
 import com.google.gson.Gson
 import dagger.assisted.Assisted
@@ -100,31 +99,22 @@ class PhoneMsrWorker @AssistedInject constructor(
             delay(1000)
         }
         msr /= 5
-        consoledebug("$msr")
+        consoleDebug("$msr")
         return if(
             msrsRepo.postPhoneMsr(
                 PhoneMeasurement(
-                    firebaseTable = PhoneMeasurementFirebase(
                         baseInfo = MeasurementBase(
                             tileIndex = flowLocationProvider.tileIndexFromLocation(Priority.PRIORITY_HIGH_ACCURACY) ?: return Result.retry(),
                             value = msr
                         )
-                    )
                 ),
                 appSettings.data.first().networkMode
             )
         ) Result.success(
-            gson.workDataOfMsrWorkerResult(msr, Measure.phone)
+            workDataOf(MeasurementBase.MSR_KEY to msr)
         )
-        else Result.failure(gson.workDataOfMsrWorkerResult(msr, Measure.phone))
+        else Result.failure(workDataOf(MeasurementBase.MSR_KEY to msr))
 
     }
     
-}
-
-fun Gson.workDataOfMsrWorkerResult(msr : Int, msrType : Measure) : Data{
-    return workDataOf(
-        MeasurementBase.MSR_KEY to msr,
-        MeasurementBase.MSR_TYPE_KEY to toJson(msrType)
-    )
 }

@@ -1,33 +1,35 @@
 package com.example.signaldoctor.room
 
 import androidx.room.Dao
-import androidx.room.MapInfo
+import androidx.room.MapColumn
 import androidx.room.Query
-import com.example.signaldoctor.Settings
-import com.example.signaldoctor.bin.MsrsMapEntry
-import com.example.signaldoctor.contracts.MsrsMap
+import com.example.signaldoctor.contracts.Measure
+import com.example.signaldoctor.utils.msrTypeWhen
+import com.example.signaldoctor.utils.whenMsrType
+import com.example.signaldoctor.workers.BaseMsrWorker
 import kotlinx.coroutines.flow.Flow
 import java.util.Date
 
 @Dao
-abstract class PhoneMeasurementDAO : BaseMsrsDAO<PhoneMeasurement>() {
+abstract class PhoneMeasurementDAO : RoomMeasurementDAO<PhoneMeasurement>() {
 
     @Query("SELECT * FROM phone_table WHERE id = :id ORDER BY date DESC")
-    abstract fun getMeasurementInfo(id : Int) : Flow<PhoneMeasurement>
+    abstract override fun getMeasurementInfo(id : Int) : Flow<PhoneMeasurement>
 
-    @Query("SELECT * FROM phone_table ORDER BY DATE")
-    abstract fun getMsrs() : Flow<List<PhoneMeasurement>>
+    @Query("SELECT uuid,* FROM phone_table ORDER BY DATE")
+    abstract override fun getMsrs() : Flow<Map<@MapColumn(TableColumn.uuid) String, PhoneMeasurement>>
 
-    @Query("SELECT COUNT(tile_index) FROM phone_table WHERE :currentTile <= tile_index AND date > :limitDate")
-    abstract fun countMeasures(currentTile : Long, limitDate: Date) : Flow<Int>
+
+    @Query("SELECT COUNT(tile_index) FROM phone_table WHERE :currentTile <= tile_index AND date > :maxOldness")
+    abstract override fun countMeasures(currentTile : Long, maxOldness: Date) : Flow<Int>
 
     @Query("SELECT MIN(date) FROM phone_table")
-    abstract fun getOldestDate() : Flow<Date>
+    abstract override fun getOldestDate() : Flow<String>
 
-    @MapInfo(keyColumn = TableColumn.tile_index, valueColumn = TableColumn.value)
     @Query("SELECT tile_index, AVG(value) AS value FROM phone_table " +
             "WHERE date >= :oldness OR :oldness IS NULL AND date <= :freshness OR :freshness IS NULL " +
             "GROUP BY tile_index " +
             "ORDER BY date DESC LIMIT :msrsToTake")
-   abstract fun getMsrsAvgs(freshness : Date? = null, oldness : Date? = null, msrsToTake : Int? = Int.MAX_VALUE) : Flow<Map<Long,Int>>
+   abstract override fun getMsrsAvgs(freshness : Date?, oldness : Date?, msrsToTake : Int?)
+   : Flow<Map<@MapColumn(TableColumn.tile_index)Long,@MapColumn(TableColumn.value)Int>>
 }

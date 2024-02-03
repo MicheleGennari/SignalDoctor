@@ -27,7 +27,6 @@ import com.example.signaldoctor.appComponents.isLocationPermissionGranted
 import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.mapUtils.CoordConversions.tileIndexFromLocation
-import com.example.signaldoctor.realtimeFirebase.WifiMeasurementFirebase
 import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.room.MeasurementBase
 import com.example.signaldoctor.room.WiFIMeasurement
@@ -69,7 +68,7 @@ class WifiMsrWorker @AssistedInject constructor(
             }
 
             when {
-                Build . VERSION . SDK_INT < Build . VERSION_CODES . S -> wifiWorkOlderBuilds(
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.S -> wifiWorkOlderBuilds(
                     applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
                 )
 
@@ -111,7 +110,7 @@ class WifiMsrWorker @AssistedInject constructor(
     suspend fun wifiWorkOlderBuilds(wifiManager: WifiManager) : Result {
         return if (wifiManager.isWifiEnabled) {
             var msr = 0
-            for (i in 1..5){
+            repeat(5){ i ->
                 delay(1000)
                 msr += wifiManager.connectionInfo.rssi
                 setProgress(workDataOf(NoiseMsrWorker.Progress to i/10f))
@@ -121,18 +120,16 @@ class WifiMsrWorker @AssistedInject constructor(
             if(
                     msrsRepo.postWifiMsr(
                     measurement = WiFIMeasurement(
-                        firebaseTable = WifiMeasurementFirebase(
                             baseInfo = MeasurementBase(
                                 tileIndex = locationProvider.tileIndexFromLocation(Priority.PRIORITY_HIGH_ACCURACY) ?: return Result.retry(),
                                 value= msr
                             )
-                        )
                     ),
                     appSettings.data.first().networkMode
                 )
             ){
-              Result.success(gson.workDataOfMsrWorkerResult(msr, Measure.wifi))
-            } else Result.failure(gson.workDataOfMsrWorkerResult(msr, Measure.wifi))
+              Result.success(workDataOf(MeasurementBase.MSR_KEY to msr))
+            } else Result.failure(workDataOf(MeasurementBase.MSR_KEY to msr))
 
         } else Result.failure()
     }
@@ -153,55 +150,48 @@ class WifiMsrWorker @AssistedInject constructor(
         return if(
             msrsRepo.postWifiMsr(
                 WiFIMeasurement(
-                    firebaseTable = WifiMeasurementFirebase(
-                        MeasurementBase(
+                        baseInfo = MeasurementBase(
                             tileIndex = locationProvider.tileIndexFromLocation(Priority.PRIORITY_HIGH_ACCURACY) ?: return Result.retry(),
                             value = msr,
                         )
-                    )
                 ),
             appSettings.data.first().networkMode
             )
         )
-            Result.success(gson.workDataOfMsrWorkerResult(msr, Measure.wifi))
+            Result.success(workDataOf(MeasurementBase.MSR_KEY to msr))
         else
-            Result.failure(gson.workDataOfMsrWorkerResult(msr, Measure.wifi))
+            Result.failure(workDataOf(MeasurementBase.MSR_KEY to msr))
 
     }
 
-}
+    suspend fun wifiSignalStrength(cm : ConnectivityManager)  = suspendCancellableCoroutine { continuation ->
 
-fun <T> printAndReturn(tag : String,t: T) : T{
-    Log.i(tag, "$t")
-    return t
-}
+        val callback =  @RequiresApi(Build.VERSION_CODES.S)
+        object : NetworkCallback(FLAG_INCLUDE_LOCATION_INFO){
 
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
 
+                continuation.resume((networkCapabilities.transportInfo as WifiInfo).rssi)
 
+            }
 
-suspend fun wifiSignalStrength(cm : ConnectivityManager)  = suspendCancellableCoroutine { continuation ->
-    val callback = @RequiresApi(Build.VERSION_CODES.S) object : NetworkCallback(FLAG_INCLUDE_LOCATION_INFO){
-
-        override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-
-            continuation.resume((networkCapabilities.transportInfo as WifiInfo).rssi)
+            override fun onLost(network: Network) {
+                continuation.resumeWithException(IOException("Wifi Connection Not Stable"))
+            }
 
         }
 
-        override fun onLost(network: Network) {
-            continuation.resumeWithException(IOException("Wifi Connection Not Stable"))
-        }
-
+        cm.requestNetwork(
+            NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build(),
+            callback
+        )
+        continuation.invokeOnCancellation { cm.unregisterNetworkCallback(callback) }
     }
 
-    cm.requestNetwork(
-        NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build(),
-        callback
-    )
-    continuation.invokeOnCancellation { cm.unregisterNetworkCallback(callback) }
+
 }
 
 

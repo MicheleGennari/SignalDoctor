@@ -10,17 +10,15 @@ import com.example.signaldoctor.hiltModules.AndroidGeocoder
 import com.example.signaldoctor.mapUtils.IFlowGeocoder
 import com.example.signaldoctor.mapUtils.geocoderHints
 import com.example.signaldoctor.searchBarHint.ISearchBarHint
-import com.example.signaldoctor.utils.Loggers
-import com.example.signaldoctor.utils.Loggers.consoledebug
+import com.example.signaldoctor.utils.Loggers.consoleDebug
 import com.example.signaldoctor.utils.addHint
 import com.example.signaldoctor.utils.protoBuffHints
-import com.example.signaldoctor.workers.printAndReturn
+import com.example.signaldoctor.utils.printAndReturn
 import dagger.hilt.android.scopes.ViewModelScoped
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -37,11 +35,12 @@ class MapScreenUiState @Inject constructor(
 ) {
 
 
-    private val _screenLocation = MutableStateFlow<Location?>(null)
+    private val _screenLocation = MutableStateFlow<Location?>(Location("").apply { latitude = 54.6
+    longitude = 23.2})
     val screenLocation = _screenLocation.asStateFlow()
     fun setScreenLocation(@FloatRange(from = -90.0, to= 90.0 ) latitude : Double, @FloatRange(from = -180.0, to= 180.0 ) longitude : Double ) {
 
-        consoledebug("inside set Screen Location")
+        consoleDebug("inside set Screen Location")
 
         _screenLocation.value = Location("provider").also { newScreenLocation ->
             newScreenLocation.latitude = latitude
@@ -70,6 +69,7 @@ class MapScreenUiState @Inject constructor(
     val centerOnScreenLocation = _centerOnScreenLocation.asStateFlow()
 
     fun setCenterOnScreenLocation(newValue : Boolean){
+        consoleDebug("Setting center on screen to $newValue")
         _centerOnScreenLocation.value = newValue
     }
 
@@ -98,7 +98,7 @@ class MapScreenUiState @Inject constructor(
             setIsSearchBarLoading(true)
         }.debounce(Duration.ofSeconds(1)).flowOn(Dispatchers.Default).map{ query ->
             geocoder.getAddressesFromLocationName(query).also {
-                consoledebug("a geocoder call has been completed")
+                consoleDebug("a geocoder call has been completed")
             }
         }.flowOn(Dispatchers.IO).map{it.geocoderHints()}
             .onEach {

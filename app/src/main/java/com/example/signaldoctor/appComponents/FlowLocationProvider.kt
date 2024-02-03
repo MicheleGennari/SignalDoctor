@@ -1,6 +1,7 @@
 package com.example.signaldoctor.appComponents
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.location.Location
 import android.os.Looper
@@ -17,10 +18,12 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
@@ -38,11 +41,11 @@ const val CHANGE_LOCATION_SETTINGS = 42
 
 const val LOCATION_GRANULARITY = 2000
 const val LOCATION_INTERVAL = 5000L
-const val LOCATION_PRIORITY = Priority.PRIORITY_BALANCED_POWER_ACCURACY
+const val LOCATION_PRIORITY = Priority.PRIORITY_HIGH_ACCURACY
 
 @Singleton
 class FlowLocationProvider @Inject constructor(
-    val provider: FusedLocationProviderClient,
+    private val provider: FusedLocationProviderClient,
     private val settingsClient : SettingsClient,
 ){
 
@@ -71,20 +74,16 @@ class FlowLocationProvider @Inject constructor(
 
             }
 
-            try {
-                provider.requestLocationUpdates(
-                    lr,
-                    callback,
-                    Looper.getMainLooper()
-                )
-                awaitCancellation()
-            } finally {
-                provider.removeLocationUpdates(callback)
-            }
+            provider.requestLocationUpdates(
+                lr,
+                callback,
+                Looper.getMainLooper()
+            )
+            awaitClose{ provider.removeLocationUpdates(callback) }
 
     }.conflate().distinctUntilChanged()
 
-     suspend fun checkLocationSettings(lr: LocationRequest, mainActivity: MainActivity) =
+     suspend fun checkLocationSettings(lr: LocationRequest, mainActivity: Activity) =
          suspendCancellableCoroutine { continuation->
 
             settingsClient.checkLocationSettings(
@@ -95,6 +94,7 @@ class FlowLocationProvider @Inject constructor(
                 if(exception is ResolvableApiException){
                     exception.startResolutionForResult(mainActivity, CHANGE_LOCATION_SETTINGS)
                 }
+                continuation.resume(false)
             }
         }
 
