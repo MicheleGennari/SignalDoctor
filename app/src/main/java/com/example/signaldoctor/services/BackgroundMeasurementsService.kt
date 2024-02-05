@@ -1,6 +1,5 @@
 package com.example.signaldoctor.services
 
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -12,11 +11,8 @@ import androidx.core.net.toUri
 import androidx.datastore.core.DataStore
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleService
-import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.work.WorkInfo
-import androidx.work.hasKeyWithValueOfType
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.R
@@ -24,7 +20,7 @@ import com.example.signaldoctor.appComponents.AppNotificationManager
 import com.example.signaldoctor.appComponents.FlowLocationProvider
 import com.example.signaldoctor.appComponents.MainActivity
 import com.example.signaldoctor.appComponents.MsrsWorkManager
-import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
+import com.example.signaldoctor.viewModels.MapScreen.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.DestinationsInfo
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.utils.whenMsrType
@@ -34,8 +30,6 @@ import com.example.signaldoctor.utils.noiseSettings
 import com.example.signaldoctor.utils.phoneSettings
 import com.example.signaldoctor.utils.updateDSL
 import com.example.signaldoctor.utils.wifiSettings
-import com.example.signaldoctor.workers.BaseMsrWorker
-import com.example.signaldoctor.workers.getValue
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -48,7 +42,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import java.time.Duration

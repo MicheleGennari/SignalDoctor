@@ -17,7 +17,7 @@ import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.AppNotificationManager
 import com.example.signaldoctor.appComponents.MEASURE_BACKGROUND_WORK_TAG
-import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
+import com.example.signaldoctor.viewModels.MapScreen.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.mapUtils.CoordConversions.tileIndexFromLocation
 import com.example.signaldoctor.room.MeasurementBase

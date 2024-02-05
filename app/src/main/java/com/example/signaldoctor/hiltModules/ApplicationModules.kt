@@ -1,7 +1,8 @@
 package com.example.signaldoctor.hiltModules
 
 import android.content.Context
-import android.location.Geocoder
+import android.net.ConnectivityManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
@@ -34,6 +35,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.scopes.ViewModelScoped
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,6 +45,9 @@ import java.lang.annotation.Inherited
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class AppCoroutineScope
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class RealtimeFirebase
@@ -56,6 +62,18 @@ const val appSettingsDataStoreFileName = "AppSettings.pb"
 @Module
 @InstallIn(SingletonComponent::class)
 class ApplicationModules {
+
+
+    @Singleton
+    @Provides
+    @AppCoroutineScope
+    fun provideAppCoroutineScope() = CoroutineScope(
+        SupervisorJob()
+                +CoroutineName("Application scope")
+                + CoroutineExceptionHandler { _, e ->
+                    Log.e("Application Scope", "job in Application coroutineScope caught exception", e)
+                }
+    )
 
     @Singleton
     @Provides
@@ -81,9 +99,8 @@ class ApplicationModules {
         return DataStoreFactory.create(
             serializer = AppSettingsSerializer(),
             produceFile = { app.filesDir.resolve("$dataStoresDir/$appSettingsDataStoreFileName") },
-            scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
             corruptionHandler = ReplaceFileCorruptionHandler { e ->
-                e.printStackTrace()
+                Log.e("DataStore<AppSettings>", "Data maybe corrupted", e)
                 AppSettings.getDefaultInstance()
             }
         )
@@ -140,6 +157,12 @@ class ApplicationModules {
     @Provides
     fun provideNotificationManager(@ApplicationContext ctx : Context) : NotificationManagerCompat =
         NotificationManagerCompat.from(ctx)
+
+    @Singleton
+    @Provides
+    fun provideConnectivityManager(@ApplicationContext ctx : Context) : ConnectivityManager {
+        return ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    }
 
 }
 

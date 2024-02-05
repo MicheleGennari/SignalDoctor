@@ -1,10 +1,8 @@
 package com.example.signaldoctor.hiltModules
 
 import android.content.Context
-import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.telephony.TelephonyManager
-import androidx.core.app.NotificationManagerCompat
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -86,12 +84,7 @@ class ViewModelProvideModules {
         return ctx.getSystemService(Context.WIFI_SERVICE) as WifiManager
     }
 
-    @ViewModelScoped
-    @Provides
-    fun provideConnectivityManager(@ApplicationContext ctx : Context) : ConnectivityManager {
 
-        return ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    }
 
     /*
     @ViewModelScoped

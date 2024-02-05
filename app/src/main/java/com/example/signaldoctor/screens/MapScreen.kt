@@ -7,7 +7,6 @@ import android.content.res.Resources.NotFoundException
 import android.location.Location
 import android.util.Log
 import android.widget.Toast
-import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -61,7 +60,6 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -93,8 +91,7 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.signaldoctor.NetworkMode
 import com.example.signaldoctor.R
-import com.example.signaldoctor.appComponents.MainActivity
-import com.example.signaldoctor.appComponents.viewModels.MyViewModel
+import com.example.signaldoctor.viewModels.MapScreen.MyViewModel
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.contracts.MeasuringState
 import com.example.signaldoctor.contracts.MsrsMap
@@ -149,6 +146,7 @@ fun MapScreen(
         }
 
         val locationPermission = rememberLocationPermissionState { isGranted ->
+            mapScreenVM.setLocationPermissionsState(isGranted)
             when(isGranted) {
                 true -> {
                     consoleDebug("Location Permission GRANTED")
@@ -160,7 +158,7 @@ fun MapScreen(
 
         val screenLocation by mapScreenVM.mapScreenUiState.screenLocation.collectAsStateWithLifecycle()
         val userLocation by mapScreenVM.userLocation.collectAsStateWithLifecycle()
-
+/*
         DisposableEffect(locationPermission.status.isGranted){
             if(locationPermission.status.isGranted)
                 mapScreenVM.locationUpdatesOn()
@@ -168,7 +166,7 @@ fun MapScreen(
                 mapScreenVM.locationUpdatesOff()
             }
         }
-
+*/
 
         val recordPermission = rememberRecordPermissionState { isGranted ->
             when(isGranted) {
@@ -419,6 +417,7 @@ fun MapScreen(
 
                 LaunchedEffect(key1 = isInternetAvailable) {
                     if (!isInternetAvailable) {
+                        delay(100)
                         snackbarHostState.showSnackbar(
                             message = "No internet connection. Switched to offline mode",
                             withDismissAction = true

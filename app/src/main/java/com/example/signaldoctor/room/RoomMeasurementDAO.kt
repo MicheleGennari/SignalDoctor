@@ -11,7 +11,7 @@ import java.util.Date
 @Dao
 abstract class RoomMeasurementDAO<T : RoomMeasurementEntity> {
     @Insert(onConflict = OnConflictStrategy.REPLACE )
-    abstract fun postMsr(measurement : T)
+    abstract suspend fun postMsr(measurement : T)
 
     abstract fun getMeasurementInfo(id : Int) : Flow<T>
 

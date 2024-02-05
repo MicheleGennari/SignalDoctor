@@ -70,7 +70,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.signaldoctor.MeasurementSettings
 import com.example.signaldoctor.R
 import com.example.signaldoctor.appComponents.MainActivity
-import com.example.signaldoctor.appComponents.viewModels.SettingsScreenVM
+import com.example.signaldoctor.viewModels.SettingsScreenVM
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.services.BackgroundMeasurementsService
 import com.example.signaldoctor.services.DURATION_KEY

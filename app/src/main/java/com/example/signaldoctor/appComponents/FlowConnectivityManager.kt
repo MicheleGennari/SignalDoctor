@@ -5,15 +5,25 @@ import android.net.ConnectivityManager.NetworkCallback
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Build
+import com.example.signaldoctor.hiltModules.AppCoroutineScope
 import com.example.signaldoctor.utils.Loggers.consoleDebug
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.ProducerScope
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
+import javax.inject.Singleton
 
-class FlowConnectivityManager @Inject constructor(private val connectivityManager: ConnectivityManager) {
+@Singleton
+class FlowConnectivityManager @Inject constructor(
+    private val connectivityManager: ConnectivityManager,
+    @AppCoroutineScope private val appCoroutineScope: CoroutineScope
+) {
 
+    val isInternetAvailable = internetAvailabilityUpdates().stateIn(appCoroutineScope, SharingStarted.Eagerly, false)
 
     fun internetAvailabilityUpdates()  = callbackFlow {
 

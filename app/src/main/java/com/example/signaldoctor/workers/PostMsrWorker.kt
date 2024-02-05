@@ -12,7 +12,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.example.signaldoctor.AppSettings
 import com.example.signaldoctor.R
-import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
+import com.example.signaldoctor.viewModels.MapScreen.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.contracts.Measure
 import com.example.signaldoctor.repositories.MsrsRepo
 import com.example.signaldoctor.room.MeasurementBase

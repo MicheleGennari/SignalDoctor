@@ -12,7 +12,7 @@ import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.example.signaldoctor.R
-import com.example.signaldoctor.appComponents.viewModels.MEASUREMENT_NOTIFICATION_CHANNEL_ID
+import com.example.signaldoctor.viewModels.MapScreen.MEASUREMENT_NOTIFICATION_CHANNEL_ID
 import com.example.signaldoctor.broadcastReceivers.RUN_MEASUREMENT_ACTION
 import com.example.signaldoctor.broadcastReceivers.RunMeasurementReceiver
 import com.example.signaldoctor.contracts.Measure
@@ -21,7 +21,6 @@ import com.example.signaldoctor.screens.launchToast
 import com.example.signaldoctor.utils.getMsrTypeSmallIcon
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
-import dagger.hilt.android.scopes.ViewModelScoped
 import javax.inject.Inject
 import javax.inject.Singleton
 

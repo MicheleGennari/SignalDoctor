@@ -164,7 +164,7 @@ class RealtimeDBImpl @Inject constructor(private val db : FirebaseDatabase) : IM
     }.flowOn(Dispatchers.Default)
 
 
-    override fun areMsrsDated(msrType : Measure, userLocation : Location, maxOldness : Date) : Flow<Boolean> {
+    override fun areMsrsDated(msrType : Measure, userLocation : Location, expirationDate : Date) : Flow<Boolean> {
 
         val currentTileIndex = MapView.getTileSystem().tileIndexFromLocation(userLocation)
 

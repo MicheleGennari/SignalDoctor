@@ -7,26 +7,38 @@ import android.location.Location
 import android.os.Looper
 import androidx.lifecycle.viewModelScope
 import com.example.signaldoctor.contracts.MeasuringState
+import com.example.signaldoctor.hiltModules.AppCoroutineScope
 import com.example.signaldoctor.utils.Loggers
+import com.example.signaldoctor.utils.Loggers.consoleDebug
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.*
 import com.google.android.gms.tasks.CancellationTokenSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -47,8 +59,8 @@ const val LOCATION_PRIORITY = Priority.PRIORITY_HIGH_ACCURACY
 class FlowLocationProvider @Inject constructor(
     private val provider: FusedLocationProviderClient,
     private val settingsClient : SettingsClient,
+    @AppCoroutineScope private val appCoroutineScope: CoroutineScope
 ){
-
 
     companion object{
         val defaultLocationUpdateSettings = LocationRequest.Builder(LOCATION_INTERVAL).setPriority(
@@ -56,6 +68,39 @@ class FlowLocationProvider @Inject constructor(
         ).build()
     }
 
+    @SuppressLint("MissingPermission")
+    val userLocation : StateFlow<Location?> =  callbackFlow<Location?> {
+
+        val callback = object : LocationCallback() {
+            override fun onLocationResult(p0: LocationResult) {
+                super.onLocationResult(p0)
+                trySend(p0.lastLocation)
+            }
+
+            override fun onLocationAvailability(p0: LocationAvailability) {
+                super.onLocationAvailability(p0)
+                if (!p0.isLocationAvailable) trySend(null)
+            }
+
+        }
+
+        provider.requestLocationUpdates(
+            defaultLocationUpdateSettings,
+            callback,
+            Looper.getMainLooper()
+        )
+        awaitClose{ provider.removeLocationUpdates(callback) }
+
+    }.onStart {
+        consoleDebug("gps location collection started")
+    }.onCompletion {
+        consoleDebug("gps location collection ended")
+    }.stateIn(appCoroutineScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun userLoc(permission : Flow<Boolean>) = permission.flatMapLatest { isLocationGranted ->
+        if(isLocationGranted) userLocation
+        else MutableStateFlow<Location?>(null).asStateFlow()
+    }.stateIn(appCoroutineScope, SharingStarted.WhileSubscribed(), null)
 
 
     @SuppressLint("MissingPermission")
@@ -81,7 +126,7 @@ class FlowLocationProvider @Inject constructor(
             )
             awaitClose{ provider.removeLocationUpdates(callback) }
 
-    }.conflate().distinctUntilChanged()
+    }.flowOn(Dispatchers.IO)
 
      suspend fun checkLocationSettings(lr: LocationRequest, mainActivity: Activity) =
          suspendCancellableCoroutine { continuation->

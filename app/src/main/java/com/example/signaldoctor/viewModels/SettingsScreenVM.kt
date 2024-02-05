@@ -1,4 +1,4 @@
-package com.example.signaldoctor.appComponents.viewModels
+package com.example.signaldoctor.viewModels
 
 import androidx.datastore.core.DataStore
 import androidx.lifecycle.ViewModel
